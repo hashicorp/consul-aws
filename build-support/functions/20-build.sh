@@ -136,7 +136,7 @@ function build_consul {
        mkdir -p "${MAIN_GOPATH}/pkg/mod"
    fi
 
-   local container_id=$(docker create -v "${MAIN_GOPATH}/pkg/mod:/go/pkg/mod:ro" -it -e CGO_ENABLED=0 ${image_name} gox -os="${XC_OS}" -arch="${XC_ARCH}" -osarch="!darwin/arm !darwin/arm64" -ldflags "${GOLDFLAGS}" -output "pkg/bin/${extra_dir}{{.OS}}_{{.Arch}}/${PROJECT}" -tags="${GOTAGS}")
+   local container_id=$(docker create -v "${MAIN_GOPATH}/pkg/mod:/go/pkg/mod:ro" -it -e CGO_ENABLED=0 ${image_name} gox -os="${XC_OS}" -arch="${XC_ARCH}" -osarch="!darwin/arm !darwin/arm64 !solaris/amd64" -ldflags "${GOLDFLAGS}" -output "pkg/bin/${extra_dir}{{.OS}}_{{.Arch}}/${PROJECT}" -tags="${GOTAGS}")
    ret=$?
 
    if test $ret -eq 0
@@ -259,7 +259,7 @@ function build_consul_local {
          do
             outdir="pkg.bin.new/${extra_dir}${os}_${arch}"
             osarch="${os}/${arch}"
-            if test "${osarch}" == "darwin/arm" -o "${osarch}" == "darwin/arm64" -o "${osarch}" == "freebsd/arm64" -o "${osarch}" == "windows/arm" -o "${osarch}" == "windows/arm64"
+            if test "${osarch}" == "darwin/arm" -o "${osarch}" == "darwin/arm64"  -o "${osarch}" == "solaris/amd64" -o "${osarch}" == "freebsd/arm64" -o "${osarch}" == "windows/arm" -o "${osarch}" == "windows/arm64"
             then
                continue
             fi
