@@ -60,3 +60,19 @@ func TestAWSTransformServices(t *testing.T) {
 	}
 	require.Equal(t, expected, a.transformServices(services))
 }
+
+func TestAWSTransformNamespace(t *testing.T) {
+	a := aws{}
+	type variant struct {
+		namespace sd.Namespace
+		expected  namespace
+	}
+	variants := []variant{
+		{namespace: sd.Namespace{Name: x.String("A"), Id: x.String("1"), Type: sd.NamespaceTypeDnsPublic}, expected: namespace{name: "A", id: "1", isHTTP: false}},
+		{namespace: sd.Namespace{Name: x.String("B"), Id: x.String("2"), Type: sd.NamespaceTypeHttp}, expected: namespace{name: "B", id: "2", isHTTP: true}},
+	}
+
+	for _, v := range variants {
+		require.Equal(t, v.expected, a.transformNamespace(&v.namespace))
+	}
+}

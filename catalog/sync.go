@@ -28,7 +28,6 @@ func Sync(toAWS, toConsul bool, namespaceID, consulPrefix, awsPrefix, awsPullInt
 	}
 	aws := aws{
 		client:       awsClient,
-		namespaceID:  namespaceID,
 		log:          hclog.Default().Named("aws"),
 		trigger:      make(chan bool, 1),
 		consulPrefix: consulPrefix,
@@ -36,6 +35,12 @@ func Sync(toAWS, toConsul bool, namespaceID, consulPrefix, awsPrefix, awsPullInt
 		toConsul:     toConsul,
 		pullInterval: pullInterval,
 		dnsTTL:       awsDNSTTL,
+	}
+
+	err = aws.setupNamespace(namespaceID)
+	if err != nil {
+		log.Error("cannot setup namespace", "error", err)
+		return
 	}
 
 	fetchConsulStop := make(chan struct{})
