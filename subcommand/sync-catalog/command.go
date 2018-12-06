@@ -14,20 +14,23 @@ import (
 	"github.com/mitchellh/cli"
 )
 
+const DefaultPollInterval = "30s"
+
 // Command is the command for syncing the A
 type Command struct {
 	UI cli.Ui
 
-	flags                   *flag.FlagSet
-	http                    *flags.HTTPFlags
-	flagToConsul            bool
-	flagToAWS               bool
-	flagAWSNamespaceID      string
-	flagAWSServicePrefix    string
-	flagAWSPullInterval     string
-	flagAWSDNSTTL           int64
-	flagConsulServicePrefix string
-	flagConsulDomain        string
+	flags                         *flag.FlagSet
+	http                          *flags.HTTPFlags
+	flagToConsul                  bool
+	flagToAWS                     bool
+	flagAWSNamespaceID            string
+	flagAWSServicePrefix          string
+	flagAWSDeprecatedPullInterval string
+	flagAWSPollInterval           string
+	flagAWSDNSTTL                 int64
+	flagConsulServicePrefix       string
+	flagConsulDomain              string
 
 	once sync.Once
 	help string
@@ -47,8 +50,13 @@ func (c *Command) init() {
 	c.flags.StringVar(&c.flagConsulServicePrefix, "consul-service-prefix",
 		"", "A prefix to prepend to all services written to Consul from AWS. "+
 			"If this is not set then services will have no prefix.")
-	c.flags.StringVar(&c.flagAWSPullInterval, "aws-pull-interval",
-		"30s", "The interval between fetching from AWS CloudMap. "+
+	c.flags.StringVar(&c.flagAWSDeprecatedPullInterval, "aws-pull-interval",
+		DefaultPollInterval, "[DEPRECATED] The interval between fetching from AWS CloudMap. "+
+			"Accepts a sequence of decimal numbers, each with optional "+
+			"fraction and a unit suffix, such as \"300ms\", \"10s\", \"1.5m\". "+
+			"Defaults to 30s)")
+	c.flags.StringVar(&c.flagAWSPollInterval, "aws-poll-interval",
+		DefaultPollInterval, "The interval between fetching from AWS CloudMap. "+
 			"Accepts a sequence of decimal numbers, each with optional "+
 			"fraction and a unit suffix, such as \"300ms\", \"10s\", \"1.5m\". "+
 			"Defaults to 30s)")
@@ -87,12 +95,18 @@ func (c *Command) Run(args []string) int {
 		return 1
 	}
 
+	pollInterval := c.flagAWSPollInterval
+	if pollInterval == DefaultPollInterval && c.flagAWSDeprecatedPullInterval != DefaultPollInterval {
+		c.UI.Info("Please use -aws-poll-interval instead of the deprecated -aws-pull-interval")
+		pollInterval = c.flagAWSDeprecatedPullInterval
+	}
+
 	stop := make(chan struct{})
 	stopped := make(chan struct{})
 	go catalog.Sync(
 		c.flagToAWS, c.flagToConsul, c.flagAWSNamespaceID,
 		c.flagConsulServicePrefix, c.flagAWSServicePrefix,
-		c.flagAWSPullInterval, c.flagAWSDNSTTL, c.getStaleWithDefaultTrue(),
+		pollInterval, c.flagAWSDNSTTL, c.getStaleWithDefaultTrue(),
 		awsClient, consulClient,
 		stop, stopped,
 	)
