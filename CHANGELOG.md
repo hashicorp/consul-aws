@@ -1,4 +1,6 @@
-## 0.1.1 (UNRELEASED)
+## 0.1.2 (UNRELEASED)
+
+## 0.1.1 (Dezember 20, 2018)
 
 IMPROVEMENTS:
 
