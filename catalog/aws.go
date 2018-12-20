@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	x "github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/awserr"
 	sd "github.com/aws/aws-sdk-go-v2/service/servicediscovery"
 	"github.com/hashicorp/go-hclog"
@@ -20,11 +21,17 @@ const (
 	ConsulAWSID     = "external-aws-id"
 )
 
+type namespace struct {
+	id     string
+	name   string
+	isHTTP bool
+}
+
 type aws struct {
 	lock         sync.RWMutex
 	client       *sd.ServiceDiscovery
 	log          hclog.Logger
-	namespaceID  string
+	namespace    namespace
 	services     map[string]service
 	trigger      chan bool
 	consulPrefix string
@@ -60,12 +67,22 @@ func (a *aws) sync(consul *consul, stop, stopped chan struct{}) {
 		}
 	}
 }
+
+func (a *aws) fetchNamespace(id string) (*sd.Namespace, error) {
+	req := a.client.GetNamespaceRequest(&sd.GetNamespaceInput{Id: x.String(id)})
+	resp, err := req.Send()
+	if err != nil {
+		return nil, err
+	}
+	return resp.Namespace, nil
+}
+
 func (a *aws) fetchServices() ([]sd.ServiceSummary, error) {
 	req := a.client.ListServicesRequest(&sd.ListServicesInput{
 		Filters: []sd.ServiceFilter{{
 			Name:      sd.ServiceFilterNameNamespaceId,
 			Condition: sd.FilterConditionEq,
-			Values:    []string{a.namespaceID},
+			Values:    []string{a.namespace.id},
 		}},
 	})
 	p := req.Paginate()
@@ -76,14 +93,14 @@ func (a *aws) fetchServices() ([]sd.ServiceSummary, error) {
 	return services, p.Err()
 }
 
-func (a *aws) transformServices(aservices []sd.ServiceSummary) map[string]service {
+func (a *aws) transformServices(awsServices []sd.ServiceSummary) map[string]service {
 	services := map[string]service{}
-	for _, as := range aservices {
+	for _, as := range awsServices {
 		s := service{
 			id:           *as.Id,
 			name:         *as.Name,
 			awsID:        *as.Id,
-			awsNamespace: a.namespaceID,
+			awsNamespace: a.namespace.id,
 		}
 		if as.Description != nil && *as.Description == awsServiceDescription {
 			s.fromConsul = true
@@ -95,23 +112,47 @@ func (a *aws) transformServices(aservices []sd.ServiceSummary) map[string]servic
 	return services
 }
 
-func (a *aws) fetch() error {
-	aservices, err := a.fetchServices()
+func (a *aws) transformNamespace(awsNamespace *sd.Namespace) namespace {
+	namespace := namespace{id: *awsNamespace.Id, name: *awsNamespace.Name}
+	if awsNamespace.Type == sd.NamespaceTypeHttp {
+		namespace.isHTTP = true
+	}
+	return namespace
+}
+
+func (a *aws) setupNamespace(id string) error {
+	namespace, err := a.fetchNamespace(id)
 	if err != nil {
 		return err
 	}
-	services := a.transformServices(aservices)
+	a.namespace = a.transformNamespace(namespace)
+	return nil
+}
+
+func (a *aws) fetch() error {
+	awsService, err := a.fetchServices()
+	if err != nil {
+		return err
+	}
+	services := a.transformServices(awsService)
 	for h, s := range services {
-		if anodes, err := a.fetchNodes(s.awsID); err == nil {
-			nodes := a.transformNodes(anodes)
-			if len(nodes) == 0 {
-				continue
-			}
-			s.nodes = nodes
-		} else {
-			a.log.Error("cannot fetch nodes", "error", err)
+		var awsNodes []sd.InstanceSummary
+		var err error
+		name := s.name
+		if s.fromConsul {
+			name = a.consulPrefix + name
+		}
+		awsNodes, err = a.discoverNodes(name)
+		if err != nil {
+			a.log.Error("cannot discover nodes", "error", err)
 			continue
 		}
+
+		nodes := a.transformNodes(awsNodes)
+		if len(nodes) == 0 {
+			continue
+		}
+		s.nodes = nodes
 
 		healths, err := a.fetchHealths(s.awsID)
 		if err != nil {
@@ -210,9 +251,9 @@ func (a *aws) fetchHealths(id string) (map[string]health, error) {
 	return result, nil
 }
 
-func (a *aws) transformNodes(anodes []sd.InstanceSummary) map[string]map[int]node {
+func (a *aws) transformNodes(awsNodes []sd.InstanceSummary) map[string]map[int]node {
 	nodes := map[string]map[int]node{}
-	for _, an := range anodes {
+	for _, an := range awsNodes {
 		h := an.Attributes["AWS_INSTANCE_IPV4"]
 		p := 0
 		if an.Attributes["AWS_INSTANCE_PORT"] != "" {
@@ -238,6 +279,23 @@ func (a *aws) fetchNodes(id string) ([]sd.InstanceSummary, error) {
 		nodes = append(nodes, p.CurrentPage().Instances...)
 	}
 	return nodes, p.Err()
+}
+
+func (a *aws) discoverNodes(name string) ([]sd.InstanceSummary, error) {
+	req := a.client.DiscoverInstancesRequest(&sd.DiscoverInstancesInput{
+		HealthStatus:  sd.HealthStatusFilterHealthy,
+		NamespaceName: x.String(a.namespace.name),
+		ServiceName:   x.String(name),
+	})
+	resp, err := req.Send()
+	if err != nil {
+		return nil, err
+	}
+	nodes := []sd.InstanceSummary{}
+	for _, i := range resp.Instances {
+		nodes = append(nodes, sd.InstanceSummary{Id: i.InstanceId, Attributes: i.Attributes})
+	}
+	return nodes, nil
 }
 
 func (a *aws) getServices() map[string]service {
@@ -269,18 +327,20 @@ func (a *aws) create(services map[string]service) int {
 		}
 		name := a.consulPrefix + k
 		if len(s.awsID) == 0 {
-			req := a.client.CreateServiceRequest(&sd.CreateServiceInput{
-				DnsConfig: &sd.DnsConfig{
+			input := sd.CreateServiceInput{
+				Description: &awsServiceDescription,
+				Name:        &name,
+				NamespaceId: &a.namespace.id,
+			}
+			if !a.namespace.isHTTP {
+				input.DnsConfig = &sd.DnsConfig{
 					DnsRecords: []sd.DnsRecord{
 						{TTL: &a.dnsTTL, Type: sd.RecordTypeA},
 						{TTL: &a.dnsTTL, Type: sd.RecordTypeSrv},
 					},
-					NamespaceId:   &a.namespaceID,
-					RoutingPolicy: sd.RoutingPolicyMultivalue,
-				},
-				Description: &awsServiceDescription,
-				Name:        &name,
-			})
+				}
+			}
+			req := a.client.CreateServiceRequest(&input)
 			resp, err := req.Send()
 			if err != nil {
 				if err, ok := err.(awserr.Error); ok {

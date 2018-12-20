@@ -202,6 +202,9 @@ func (c *consul) fetch(waitIndex uint64) (uint64, error) {
 	}
 	services := c.transformServices(cservices)
 	for id, s := range c.transformServices(cservices) {
+		if s.fromAWS {
+			id = c.awsPrefix + id
+		}
 		if cnodes, err := c.fetchNodes(id); err == nil {
 			s.nodes = c.transformNodes(cnodes)
 		} else {
@@ -370,7 +373,7 @@ func (c *consul) remove(services map[string]service) int {
 				wg.Add(1)
 				go func(id string) {
 					defer wg.Done()
-					_, err := c.client.Catalog().Deregister(&api.CatalogDeregistration{Node: "consul-aws", ServiceID: id}, nil)
+					_, err := c.client.Catalog().Deregister(&api.CatalogDeregistration{Node: ConsulAWSNodeName, ServiceID: id}, nil)
 					if err != nil {
 						c.log.Error("cannot remove service", "error", err.Error())
 					} else {

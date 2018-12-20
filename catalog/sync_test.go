@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -12,9 +13,17 @@ import (
 )
 
 func TestSync(t *testing.T) {
-	// if len(os.Getenv("INTTEST")) == 0 {
-	// 	t.Skip("no int test env")
-	// }
+	if len(os.Getenv("INTTEST")) == 0 {
+		t.Skip("no int test env")
+	}
+	namespaceID := os.Getenv("NAMESPACEID")
+	if len(namespaceID) == 0 {
+		namespaceID = "ns-n5qqli2346hqood4"
+	}
+	runSyncTest(t, namespaceID)
+}
+
+func runSyncTest(t *testing.T, namespaceID string) {
 	config, err := external.LoadDefaultAWSConfig()
 	if err != nil {
 		t.Fatalf("Error retrieving AWS session: %s", err)
@@ -29,18 +38,16 @@ func TestSync(t *testing.T) {
 
 	cID := "r1"
 	cName := "redis"
+	aName := "web"
+
 	err = createServiceInConsul(c, cID, cName)
 	if err != nil {
 		t.Fatalf("error creating service in aws: %s", err)
 	}
 
-	namespaceID := os.Getenv("NAMESPACEID")
-	if len(namespaceID) == 0 {
-		namespaceID = "ns-aflsxmueeuewzthz"
-	}
-	aID, err := createServiceInAWS(a, namespaceID, "web")
+	aID, err := createServiceInAWS(a, namespaceID, aName)
 	if err != nil {
-		t.Fatalf("error creating service in aws: %s", err)
+		t.Fatalf("error creating service %s in aws: %s", aName, err)
 	}
 	err = createInstanceInAWS(a, aID)
 	if err != nil {
@@ -52,18 +59,30 @@ func TestSync(t *testing.T) {
 	go Sync(
 		true, true, namespaceID,
 		"consul_", "aws_",
-		"0", 60, true,
+		"0", 0, true,
 		a, c,
 		stop, stopped,
 	)
 
 	doneC := make(chan struct{})
 	doneA := make(chan struct{})
-	go checkForImportedAWSService(t, c, "aws_web", namespaceID, aID, doneC)
-	go checkForImportedConsulService(t, a, namespaceID, "consul_redis", doneA)
+	go func() {
+		if err := checkForImportedAWSService(c, "aws_"+aName, namespaceID, aID, 100); err != nil {
+			t.Error(err)
+		} else {
+			close(doneA)
+		}
+	}()
+	go func() {
+		if err := checkForImportedConsulService(a, namespaceID, "consul_"+cName, 100); err != nil {
+			t.Error(err)
+		} else {
+			close(doneC)
+		}
+	}()
 
 	select {
-	case <-time.After(10 * time.Second):
+	case <-time.After(20 * time.Second):
 	}
 
 	select {
@@ -88,7 +107,13 @@ func TestSync(t *testing.T) {
 	deleteServiceInConsul(c, cID)
 
 	select {
-	case <-time.After(10 * time.Second):
+	case <-time.After((WaitTime + 3) * time.Second):
+	}
+	if err = checkForImportedAWSService(c, "aws_"+aName, namespaceID, aID, 1); err == nil {
+		t.Error("Expected that the imported aws services is deleted")
+	}
+	if err = checkForImportedConsulService(a, namespaceID, "consul_"+cName, 1); err == nil {
+		t.Error("Expected that the imported consul services is deleted")
 	}
 
 	close(stop)
@@ -119,23 +144,25 @@ func deleteServiceInConsul(c *api.Client, id string) {
 
 func createServiceInAWS(a *sd.ServiceDiscovery, namespaceID, name string) (string, error) {
 	ttl := int64(60)
-	req := a.CreateServiceRequest(&sd.CreateServiceInput{
+	input := sd.CreateServiceInput{
+		Name:        &name,
+		NamespaceId: &namespaceID,
 		DnsConfig: &sd.DnsConfig{
 			DnsRecords: []sd.DnsRecord{
 				{TTL: &ttl, Type: sd.RecordTypeA},
 				{TTL: &ttl, Type: sd.RecordTypeSrv},
 			},
-			NamespaceId:   &namespaceID,
 			RoutingPolicy: sd.RoutingPolicyMultivalue,
 		},
-		Name: &name,
-	})
+	}
+	req := a.CreateServiceRequest(&input)
 	resp, err := req.Send()
 	if err != nil {
 		return "", err
 	}
 	return *resp.Service.Id, nil
 }
+
 func createInstanceInAWS(a *sd.ServiceDiscovery, serviceID string) error {
 	req := a.RegisterInstanceRequest(&sd.RegisterInstanceInput{
 		ServiceId:  &serviceID,
@@ -170,8 +197,8 @@ func deleteServiceInAWS(a *sd.ServiceDiscovery, id string) error {
 	return err
 }
 
-func checkForImportedAWSService(t *testing.T, c *api.Client, name, namespaceID, serviceID string, done chan struct{}) {
-	for {
+func checkForImportedAWSService(c *api.Client, name, namespaceID, serviceID string, repeat int) error {
+	for i := 0; i < repeat; i++ {
 		services, _, err := c.Catalog().Services(nil)
 		if err == nil {
 			if tags, ok := services[name]; ok {
@@ -182,40 +209,38 @@ func checkForImportedAWSService(t *testing.T, c *api.Client, name, namespaceID, 
 					}
 				}
 				if !found {
-					t.Error("aws tag is missing on consul service")
-					return
+					return fmt.Errorf("aws tag is missing on consul service")
 				}
-				defer close(done)
 				cservices, _, err := c.Catalog().Service(name, ConsulAWSTag, nil)
 				if err != nil {
-					return
+					return err
 				}
 				if len(cservices) != 1 {
-					t.Error("not 1 services")
-					return
+					return fmt.Errorf("not 1 services")
 				}
 				m := cservices[0].ServiceMeta
 				if m["FUBAR"] != "BARFU" {
-					t.Errorf("custom meta doesn't match: %s", m["FUBAR"])
+					return fmt.Errorf("custom meta doesn't match: %s", m["FUBAR"])
 				}
 				if m[ConsulSourceKey] != ConsulAWSTag {
-					t.Errorf("%s meta doesn't match: %s", ConsulSourceKey, m[ConsulSourceKey])
+					return fmt.Errorf("%s meta doesn't match: %s", ConsulSourceKey, m[ConsulSourceKey])
 				}
 				if m[ConsulAWSNS] != namespaceID {
-					t.Errorf("%s meta doesn't match: %s", ConsulAWSNS, m[ConsulAWSNS])
+					return fmt.Errorf("%s meta doesn't match: expected: %s actual: %s", ConsulAWSNS, namespaceID, m[ConsulAWSNS])
 				}
 				if m[ConsulAWSID] != serviceID {
-					t.Errorf("%s meta doesn't match: %s", ConsulAWSID, m[ConsulAWSID])
+					return fmt.Errorf("%s meta doesn't match: expected: %s, actual: %s", ConsulAWSID, serviceID, m[ConsulAWSID])
 				}
-				return
+				return nil
 			}
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
+	return fmt.Errorf("shrug")
 }
 
-func checkForImportedConsulService(t *testing.T, a *sd.ServiceDiscovery, namespaceID, name string, done chan struct{}) {
-	for {
+func checkForImportedConsulService(a *sd.ServiceDiscovery, namespaceID, name string, repeat int) error {
+	for i := 0; i < repeat; i++ {
 		req := a.ListServicesRequest(&sd.ListServicesInput{
 			Filters: []sd.ServiceFilter{{
 				Name:      sd.ServiceFilterNameNamespaceId,
@@ -228,10 +253,8 @@ func checkForImportedConsulService(t *testing.T, a *sd.ServiceDiscovery, namespa
 			for _, s := range p.CurrentPage().Services {
 				if *s.Name == name {
 					if !(s.Description != nil || *s.Description == awsServiceDescription) {
-						t.Error("consul description is missing on aws service")
-						return
+						return fmt.Errorf("consul description is missing on aws service")
 					}
-					defer close(done)
 					var instance *sd.InstanceSummary
 					for i := 0; i < 20; i++ {
 						ireq := a.ListInstancesRequest(&sd.ListInstancesInput{
@@ -248,23 +271,24 @@ func checkForImportedConsulService(t *testing.T, a *sd.ServiceDiscovery, namespa
 						instance = &out.Instances[0]
 					}
 					if instance == nil {
-						t.Errorf("couldn't get instance")
-						return
+						return fmt.Errorf("couldn't get instance")
 					}
 					m := instance.Attributes
+
 					if m["AWS_INSTANCE_IPV4"] != "127.0.0.1" {
-						t.Error("AWS_INSTANCE_IPV4 not correct")
+						return fmt.Errorf("AWS_INSTANCE_IPV4 not correct")
 					}
 					if m["AWS_INSTANCE_PORT"] != "6379" {
-						t.Error("AWS_INSTANCE_PORT not correct")
+						return fmt.Errorf("AWS_INSTANCE_PORT not correct")
 					}
 					if m["BARFU"] != "FUBAR" {
-						t.Error("custom meta not correct")
+						return fmt.Errorf("custom meta not correct")
 					}
-					return
+					return nil
 				}
 			}
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
+	return fmt.Errorf("shrug")
 }
