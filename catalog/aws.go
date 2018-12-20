@@ -93,9 +93,9 @@ func (a *aws) fetchServices() ([]sd.ServiceSummary, error) {
 	return services, p.Err()
 }
 
-func (a *aws) transformServices(aservices []sd.ServiceSummary) map[string]service {
+func (a *aws) transformServices(awsServices []sd.ServiceSummary) map[string]service {
 	services := map[string]service{}
-	for _, as := range aservices {
+	for _, as := range awsServices {
 		s := service{
 			id:           *as.Id,
 			name:         *as.Name,
@@ -112,9 +112,9 @@ func (a *aws) transformServices(aservices []sd.ServiceSummary) map[string]servic
 	return services
 }
 
-func (a *aws) transformNamespace(anamespace *sd.Namespace) namespace {
-	namespace := namespace{id: *anamespace.Id, name: *anamespace.Name}
-	if anamespace.Type == sd.NamespaceTypeHttp {
+func (a *aws) transformNamespace(awsNamespace *sd.Namespace) namespace {
+	namespace := namespace{id: *awsNamespace.Id, name: *awsNamespace.Name}
+	if awsNamespace.Type == sd.NamespaceTypeHttp {
 		namespace.isHTTP = true
 	}
 	return namespace
@@ -130,25 +130,25 @@ func (a *aws) setupNamespace(id string) error {
 }
 
 func (a *aws) fetch() error {
-	aservices, err := a.fetchServices()
+	awsService, err := a.fetchServices()
 	if err != nil {
 		return err
 	}
-	services := a.transformServices(aservices)
+	services := a.transformServices(awsService)
 	for h, s := range services {
-		var anodes []sd.InstanceSummary
+		var awsNodes []sd.InstanceSummary
 		var err error
 		name := s.name
 		if s.fromConsul {
 			name = a.consulPrefix + name
 		}
-		anodes, err = a.discoverNodes(name)
+		awsNodes, err = a.discoverNodes(name)
 		if err != nil {
 			a.log.Error("cannot discover nodes", "error", err)
 			continue
 		}
 
-		nodes := a.transformNodes(anodes)
+		nodes := a.transformNodes(awsNodes)
 		if len(nodes) == 0 {
 			continue
 		}
@@ -251,9 +251,9 @@ func (a *aws) fetchHealths(id string) (map[string]health, error) {
 	return result, nil
 }
 
-func (a *aws) transformNodes(anodes []sd.InstanceSummary) map[string]map[int]node {
+func (a *aws) transformNodes(awsNodes []sd.InstanceSummary) map[string]map[int]node {
 	nodes := map[string]map[int]node{}
-	for _, an := range anodes {
+	for _, an := range awsNodes {
 		h := an.Attributes["AWS_INSTANCE_IPV4"]
 		p := 0
 		if an.Attributes["AWS_INSTANCE_PORT"] != "" {
