@@ -5,6 +5,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws/ec2metadata"
 	"github.com/aws/aws-sdk-go-v2/aws/external"
 	hclog "github.com/hashicorp/go-hclog"
+	"os"
+	"time"
 )
 
 type WithEC2MetadataRegion struct {
