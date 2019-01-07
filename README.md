@@ -14,7 +14,7 @@ This project is versioned separately from Consul. Supported Consul versions for 
 
 To compile from source, please see the instructions in the [contributing section](#contributing).
 
-# Usage
+## Usage
 
 `consul-aws` can sync from Consul to AWS CloudMap (`-to-aws`), from AWS CloudMap to Consul (`-to-consul`) and both at the same time. No matter which direction is being used `consul-aws` needs to be connected to Consul and AWS CloudMap.
 
@@ -73,5 +73,8 @@ To create a docker image with your local changes:
 $ make dev-docker
 ```
 
+## Compatibility with Consul
+
+`consul-aws` supports the current version of Consul and the version before. At the time of writing this, it means `1.4` and `1.3`.
 
 [releases]: https://releases.hashicorp.com/consul-aws "Consul-AWS Releases"
