@@ -1,0 +1,117 @@
+version: 2.1
+
+references:
+  images:
+    go: &GOLANG_IMAGE circleci/golang:1.12.1
+    consul-current: &CONSUL_IMAGE_CURRENT consul:1.4.4
+    consul-previous: &CONSUL_IMAGE_PREVIOUS consul:1.4.3
+
+# reusable 'executor' object for jobs
+executors:
+  go:
+    docker:
+      - image: *GOLANG_IMAGE
+    environment:
+      - TEST_RESULTS: /tmp/test-results # path to where test results are saved
+
+jobs:
+  go-fmt-and-vet:
+    executor: go
+    steps:
+      - checkout
+
+      # Restore go module cache if there is one
+      - restore_cache:
+          keys:
+            - consul-aws-modcache-v1-{{ checksum "go.mod" }}
+
+      - run: go mod download
+
+      # Save go module cache if the go.mod file has changed
+      - save_cache:
+          key: consul-aws-modcache-v1-{{ checksum "go.mod" }}
+          paths:
+            - "/go/pkg/mod"
+
+      # check go fmt output because it does not report non-zero when there are fmt changes
+      - run:
+          name: check go fmt
+          command: |
+            files=$(go fmt ./...)
+            if [ -n "$files" ]; then
+              echo "The following file(s) do not conform to go fmt:"
+              echo "$files"
+              exit 1
+            fi
+      - run: go vet ./...
+
+  test:
+    parameters:
+      consul-version:
+        description: What version of Consul to test against
+        type: string
+    executor: go
+    environment:
+      NAMESPACEID: ns-btldyxsz7rymvf4x # AWS Cloud Map Namespace for CI
+      NAMESPACEIDHTTP: ns-dhshakmjzetizgi2 # AWS Cloud Map Namespace for CI
+    docker: # the docker stanza will overwrite the executor so we need to define GOLANG_IMAGE again here
+      - image: *GOLANG_IMAGE
+      - image: << parameters.consul-version >>
+    parallelism: 1 # make this explicit in case we need to parallelize in the future
+    steps:
+      - checkout
+      - run: mkdir -p $TEST_RESULTS
+
+      # Restore go module cache if there is one
+      - restore_cache:
+          keys:
+            - consul-aws-modcache-v1-{{ checksum "go.mod" }}
+
+      # run go tests with gotestsum
+      - run: |
+          PACKAGE_NAMES=$(go list ./...)
+          gotestsum --format=short-verbose --junitfile $TEST_RESULTS/gotestsum-report.xml -- $PACKAGE_NAMES
+      - store_test_results:
+          path: /tmp/test-results
+      - store_artifacts:
+          path: /tmp/test-results
+
+  build-distros:
+    executor: go
+    environment:
+      GOXPARALLEL: 2 # CircleCI containers are 2 CPU x 4GB RAM
+    steps:
+      - checkout
+
+      # Restore go module cache if there is one
+      - restore_cache:
+          keys:
+            - consul-aws-modcache-v1-{{ checksum "go.mod" }}
+
+      - run: make tools
+      - run: ./build-support/scripts/build-local.sh
+
+      # save dev build to CircleCI
+      - store_artifacts:
+          path: ./pkg/bin
+
+workflows:
+  version: 2
+  test-and-build:
+    jobs:
+      - go-fmt-and-vet
+      - test:
+          name: test-previous-consul-version
+          consul-version: *CONSUL_IMAGE_PREVIOUS
+          requires:
+            - go-fmt-and-vet
+      - test:
+          name: test-current-consul-version
+          consul-version: *CONSUL_IMAGE_CURRENT
+          # The resources created in the tests with the two consul versions are the same
+          # This can be changed to run in parallel once a prefix/uniqueness is added to the tests
+          requires:
+            - test-previous-consul-version
+      - build-distros:
+          requires:
+            - test-current-consul-version
