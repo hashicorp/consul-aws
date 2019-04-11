@@ -42,7 +42,7 @@ func runSyncTest(t *testing.T, namespaceID string) {
 
 	err = createServiceInConsul(c, cID, cName)
 	if err != nil {
-		t.Fatalf("error creating service in aws: %s", err)
+		t.Fatalf("error creating service in Consul: %s", err)
 	}
 
 	aID, err := createServiceInAWS(a, namespaceID, aName)
