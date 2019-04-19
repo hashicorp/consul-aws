@@ -62,4 +62,4 @@ RUN set -eux && \
     rm -rf /root/.gnupg
 
 USER ${NAME}
-CMD /bin/${NAME}
+ENTRYPOINT /bin/${NAME}
