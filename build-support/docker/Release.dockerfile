@@ -19,6 +19,9 @@ ENV VERSION=$VERSION
 # This is the location of the releases.
 ENV HASHICORP_RELEASES=https://releases.hashicorp.com
 
+# Add a label for introspection of version
+LABEL version=$VERSION
+
 # Create a non-root user to run the software.
 RUN addgroup ${NAME} && \
     adduser -S -G ${NAME} ${NAME}
