@@ -95,6 +95,38 @@ jobs:
       - store_artifacts:
           path: ./pkg/bin
 
+  # Lints all *.dockerfile but don't fail at this time
+  dockerfile-lint:
+    docker:
+      - image: hadolint/hadolint:latest-debian
+    steps:
+      - run: apt-get -qq update; apt-get -y install git # the hadolint container doesn't have git
+      - checkout
+      - run:
+          name: Dockefile lint
+          command: |
+            for file in $(find . -type f -name *.dockerfile); do
+              hadolint $file || true
+            done
+
+  # Builds and publishes Docker Container to Dockerhub for tagged releases
+  docker-build:
+    executor: go
+    steps:
+      - checkout
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - run:
+          name: wait for release package
+          command: |
+            CONSUL_AWS_VERSION=$(echo ${CIRCLE_TAG} | sed 's/v\(.*\)/\1/')
+            echo "curl-ing https://releases.hashicorp.com/${CIRCLE_PROJECT_REPONAME}/${CONSUL_AWS_VERSION}/${CIRCLE_PROJECT_REPONAME}_${CONSUL_AWS_VERSION}_linux_amd64.zip"
+            until [ $SECONDS -ge 300 ] && exit 1; do
+              curl -o /dev/null --fail --silent "https://releases.hashicorp.com/${CIRCLE_PROJECT_REPONAME}/${CONSUL_AWS_VERSION}/${CIRCLE_PROJECT_REPONAME}_${CONSUL_AWS_VERSION}_linux_amd64.zip" && exit
+              echo -n "."
+              sleep 2
+            done
+      - run: make docker-publish
 workflows:
   version: 2
   test-and-build:
@@ -115,3 +147,17 @@ workflows:
       - build-distros:
           requires:
             - test-current-consul-version
+  docker-build-and-publish:
+    jobs:
+      - dockerfile-lint:
+          filters:
+            tags:
+              only: /^v\d+\.\d+\.\d+$/
+      - docker-build:
+          requires:
+            - dockerfile-lint
+          filters:
+            tags:
+              only: /^v\d+\.\d+\.\d+$/
+            branches:
+              ignore: /.*/
