@@ -18,6 +18,12 @@ GIT_DESCRIBE?=$(shell git describe --tags --always)
 GIT_IMPORT=github.com/hashicorp/consul-aws/version
 GOLDFLAGS=-X $(GIT_IMPORT).GitCommit=$(GIT_COMMIT)$(GIT_DIRTY) -X $(GIT_IMPORT).GitDescribe=$(GIT_DESCRIBE)
 
+# Docker Image publishing variables
+DOCKER_IMAGE_NAME=consul-aws
+DOCKER_ORG=hashicorp
+export DOCKER_IMAGE_NAME
+export DOCKER_ORG
+
 export GIT_COMMIT
 export GIT_DIRTY
 export GIT_DESCRIBE
@@ -103,10 +109,14 @@ go-build-image:
 	@echo "Building Golang build container"
 	@docker build $(NOCACHE) $(QUIET) --build-arg 'GOTOOLS=$(GOTOOLS)' -t $(GO_BUILD_TAG) - < build-support/docker/Build-Go.dockerfile
 
+docker-publish:
+	@echo "Building Docker Image"
+	@$(SHELL) $(CURDIR)/build-support/scripts/publish-docker.sh
+
 clean:
 	@rm -rf \
 		$(CURDIR)/bin \
 		$(CURDIR)/pkg
 
 
-.PHONY: all bin clean dev dist docker-images go-build-image test tools
+.PHONY: all bin clean dev dist docker-images go-build-image test tools docker-publish
