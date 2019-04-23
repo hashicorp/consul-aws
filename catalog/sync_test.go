@@ -14,7 +14,7 @@ import (
 
 func TestSync(t *testing.T) {
 	if len(os.Getenv("INTTEST")) == 0 {
-		t.Skip("no int test env")
+		t.Skip("Set INTTEST=1 to enable integration tests")
 	}
 	namespaceID := os.Getenv("NAMESPACEID")
 	if len(namespaceID) == 0 {
