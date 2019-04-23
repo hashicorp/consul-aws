@@ -20,7 +20,7 @@ ENV VERSION=$VERSION
 ENV HASHICORP_RELEASES=https://releases.hashicorp.com
 
 # Add a label for introspection of version
-LABEL version=$VERSION
+LABEL consul-aws.version=$VERSION
 
 # Create a non-root user to run the software.
 RUN addgroup ${NAME} && \
