@@ -55,6 +55,13 @@ Or run the following to generate all binaries:
 $ make dist
 ```
 
+To create a docker image with your local changes:
+
+```shell
+$ make dev-docker
+```
+## Testing
+
 If you just want to run the tests:
 
 ```shell
@@ -67,11 +74,7 @@ Or to run a specific test in the suite:
 go test ./... -run SomeTestFunction_name
 ```
 
-To create a docker image with your local changes:
-
-```shell
-$ make dev-docker
-```
+**Note:** To run the sync integration tests, you must specify `INTTEST=1` in your environment and [AWS credentials](https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html#specifying-credentials).
 
 ## Compatibility with Consul
 
