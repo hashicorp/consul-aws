@@ -8,9 +8,7 @@ GOTOOLS = \
 	github.com/magiconair/vendorfmt/cmd/vendorfmt \
 	github.com/mitchellh/gox \
 	golang.org/x/tools/cmd/cover \
-	golang.org/x/tools/cmd/stringer \
-	github.com/axw/gocov/gocov \
-	gopkg.in/matm/v1/gocov-html
+	golang.org/x/tools/cmd/stringer
 
 DEV_IMAGE?=consul-aws-dev
 GO_BUILD_TAG?=consul-aws-build-go
@@ -19,6 +17,12 @@ GIT_DIRTY?=$(shell test -n "`git status --porcelain`" && echo "+CHANGES" || true
 GIT_DESCRIBE?=$(shell git describe --tags --always)
 GIT_IMPORT=github.com/hashicorp/consul-aws/version
 GOLDFLAGS=-X $(GIT_IMPORT).GitCommit=$(GIT_COMMIT)$(GIT_DIRTY) -X $(GIT_IMPORT).GitDescribe=$(GIT_DESCRIBE)
+
+# Docker Image publishing variables
+DOCKER_IMAGE_NAME=consul-aws
+DOCKER_ORG=hashicorp
+export DOCKER_IMAGE_NAME
+export DOCKER_ORG
 
 export GIT_COMMIT
 export GIT_DIRTY
@@ -105,10 +109,14 @@ go-build-image:
 	@echo "Building Golang build container"
 	@docker build $(NOCACHE) $(QUIET) --build-arg 'GOTOOLS=$(GOTOOLS)' -t $(GO_BUILD_TAG) - < build-support/docker/Build-Go.dockerfile
 
+docker-publish:
+	@echo "Building Docker Image"
+	@$(SHELL) $(CURDIR)/build-support/scripts/publish-docker.sh
+
 clean:
 	@rm -rf \
 		$(CURDIR)/bin \
 		$(CURDIR)/pkg
 
 
-.PHONY: all bin clean dev dist docker-images go-build-image test tools
+.PHONY: all bin clean dev dist docker-images go-build-image test tools docker-publish

@@ -19,6 +19,9 @@ ENV VERSION=$VERSION
 # This is the location of the releases.
 ENV HASHICORP_RELEASES=https://releases.hashicorp.com
 
+# Add a label for introspection of version
+LABEL consul-aws.version=$VERSION
+
 # Create a non-root user to run the software.
 RUN addgroup ${NAME} && \
     adduser -S -G ${NAME} ${NAME}
@@ -59,4 +62,4 @@ RUN set -eux && \
     rm -rf /root/.gnupg
 
 USER ${NAME}
-CMD /bin/${NAME}
+ENTRYPOINT /bin/${NAME}
