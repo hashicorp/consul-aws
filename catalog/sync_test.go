@@ -107,7 +107,7 @@ func runSyncTest(t *testing.T, namespaceID string) {
 	deleteServiceInConsul(c, cID)
 
 	select {
-	case <-time.After((WaitTime + 3) * time.Second):
+	case <-time.After((WaitTime * 3) * time.Second):
 	}
 	if err = checkForImportedAWSService(c, "aws_"+aName, namespaceID, aID, 1); err == nil {
 		t.Error("Expected that the imported aws services is deleted")
