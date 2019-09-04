@@ -9,7 +9,7 @@ import (
 )
 
 // Sync aws->consul and vice versa.
-func Sync(toAWS, toConsul bool, namespaceID, consulPrefix, awsPrefix, awsPullInterval string, awsDNSTTL int64, stale bool, awsClient *sd.ServiceDiscovery, consulClient *api.Client, stop, stopped chan struct{}) {
+func Sync(toAWS, toConsul bool, namespaceID, consulPrefix, awsPrefix, awsPullInterval string, awsDNSTTL int64, stale bool, awsClient *sd.Client, consulClient *api.Client, stop, stopped chan struct{}) {
 	defer close(stopped)
 	log := hclog.Default().Named("sync")
 	consul := consul{

@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 )
@@ -24,6 +25,7 @@ type service struct {
 	awsID        string
 	consulID     string
 	awsNamespace string
+	tags         map[string]string
 }
 
 type node struct {
@@ -125,4 +127,18 @@ func onlyInFirst(servicesA, servicesB map[string]service) map[string]service {
 		}
 	}
 	return result
+}
+
+func tagsNeedUpdate(servicesA, servicesB map[string]service) map[string]service {
+	result := map[string]service{}
+	for k, sa := range servicesA {
+		sb, ok := servicesB[k]
+		if !ok {
+			continue
+		}
+		if !reflect.DeepEqual(sa.tags, sb.tags) {
+			result[k] = sa
+		}
+	}
+	return onlyInFirst(result, map[string]service{})
 }

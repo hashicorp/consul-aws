@@ -229,11 +229,12 @@ func (c *consul) fetch(waitIndex uint64) (uint64, error) {
 func (c *consul) transformServices(cservices map[string][]string) map[string]service {
 	services := make(map[string]service, len(cservices))
 	for k, tags := range cservices {
-		s := service{id: k, name: k, consulID: k}
+		s := service{id: k, name: k, consulID: k, tags: map[string]string{}}
 		for _, t := range tags {
 			if t == ConsulAWSTag {
 				s.fromAWS = true
-				break
+			} else if parts := strings.SplitN(t, ":", 2); len(parts) == 2 {
+				s.tags[parts[0]] = parts[1]
 			}
 		}
 		if s.fromAWS {
@@ -292,7 +293,7 @@ func (c *consul) create(services map[string]service) int {
 		for h, nodes := range s.nodes {
 			for _, n := range nodes {
 				wg.Add(1)
-				go func(ns, k, name, h string, n node) {
+				go func(ns, k, name, h string, n node, tags map[string]string) {
 					defer wg.Done()
 					id := id(k, h, n.port)
 					meta := map[string]string{}
@@ -302,10 +303,14 @@ func (c *consul) create(services map[string]service) int {
 					meta[ConsulSourceKey] = ConsulAWSTag
 					meta[ConsulAWSNS] = ns
 					meta[ConsulAWSID] = n.awsID
+					consulTags := []string{ConsulAWSTag}
+					for k, v := range tags {
+						consulTags = append(consulTags, fmt.Sprintf("%s:%s", k, v))
+					}
 					service := api.AgentService{
 						ID:      id,
 						Service: name,
-						Tags:    []string{ConsulAWSTag},
+						Tags:    consulTags,
 						Address: h,
 						Meta:    meta,
 					}
@@ -326,7 +331,7 @@ func (c *consul) create(services map[string]service) int {
 						c.setNode(k, h, n.port, n)
 						count++
 					}
-				}(s.awsNamespace, k, name, h, n)
+				}(s.awsNamespace, k, name, h, n, s.tags)
 			}
 		}
 		for awsID, h := range s.healths {

@@ -3,7 +3,7 @@ module github.com/hashicorp/consul-aws
 require (
 	github.com/DataDog/datadog-go v0.0.0-20180822151419-281ae9f2d895 // indirect
 	github.com/armon/go-metrics v0.0.0-20180917152333-f0300d1749da // indirect
-	github.com/aws/aws-sdk-go-v2 v0.6.0
+	github.com/aws/aws-sdk-go-v2 v0.11.0
 	github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973 // indirect
 	github.com/circonus-labs/circonus-gometrics v2.2.4+incompatible // indirect
 	github.com/circonus-labs/circonusllhist v0.1.2 // indirect
@@ -18,7 +18,6 @@ require (
 	github.com/hashicorp/memberlist v0.1.0 // indirect
 	github.com/hashicorp/serf v0.8.1 // indirect
 	github.com/hashicorp/yamux v0.0.0-20181012175058-2f1d1f20f75d // indirect
-	github.com/jmespath/go-jmespath v0.0.0-20180206201540-c2b33e8439af // indirect
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
 	github.com/miekg/dns v1.0.15 // indirect
@@ -39,4 +38,8 @@ require (
 	google.golang.org/appengine v1.3.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
 	gopkg.in/vmihailenco/msgpack.v2 v2.9.1 // indirect
+	labix.org/v2/mgo v0.0.0-20140701140051-000000000287 // indirect
+	launchpad.net/gocheck v0.0.0-20140225173054-000000000087 // indirect
 )
+
+go 1.13
