@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -9,7 +10,9 @@ import (
 
 	x "github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/awserr"
+	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	sd "github.com/aws/aws-sdk-go-v2/service/servicediscovery"
+	"github.com/hashicorp/consul-aws/subcommand"
 	"github.com/hashicorp/go-hclog"
 )
 
@@ -29,7 +32,7 @@ type namespace struct {
 
 type aws struct {
 	lock         sync.RWMutex
-	client       *sd.ServiceDiscovery
+	client       *sd.Client
 	log          hclog.Logger
 	namespace    namespace
 	services     map[string]service
@@ -57,6 +60,12 @@ func (a *aws) sync(consul *consul, stop, stopped chan struct{}) {
 				consul.log.Info("created", "count", fmt.Sprintf("%d", count))
 			}
 
+			create = tagsNeedUpdate(a.getServices(), consul.getServices())
+			count = consul.create(create)
+			if count > 0 {
+				consul.log.Info("updated", "count", fmt.Sprintf("%d", count))
+			}
+
 			remove := onlyInFirst(consul.getServices(), a.getServices())
 			count = consul.remove(remove)
 			if count > 0 {
@@ -70,7 +79,7 @@ func (a *aws) sync(consul *consul, stop, stopped chan struct{}) {
 
 func (a *aws) fetchNamespace(id string) (*sd.Namespace, error) {
 	req := a.client.GetNamespaceRequest(&sd.GetNamespaceInput{Id: x.String(id)})
-	resp, err := req.Send()
+	resp, err := req.Send(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -85,9 +94,9 @@ func (a *aws) fetchServices() ([]sd.ServiceSummary, error) {
 			Values:    []string{a.namespace.id},
 		}},
 	})
-	p := req.Paginate()
+	p := sd.NewListServicesPaginator(req)
 	services := []sd.ServiceSummary{}
-	for p.Next() {
+	for p.Next(context.Background()) {
 		services = append(services, p.CurrentPage().Services...)
 	}
 	return services, p.Err()
@@ -153,6 +162,19 @@ func (a *aws) fetch() error {
 			continue
 		}
 		s.nodes = nodes
+
+		s.tags = make(map[string]string)
+		for _, nodes := range s.nodes {
+			for _, node := range nodes {
+				tags, err := a.discoverTags(node.awsID, node.attributes)
+				if err != nil {
+					a.log.Error("cannot discover tags", "error", err)
+				}
+				for k, v := range tags {
+					s.tags[k] = v
+				}
+			}
+		}
 
 		healths, err := a.fetchHealths(s.awsID)
 		if err != nil {
@@ -230,8 +252,8 @@ func (a *aws) fetchHealths(id string) (map[string]health, error) {
 		ServiceId: &id,
 	})
 	result := map[string]health{}
-	p := req.Paginate()
-	for p.Next() {
+	p := sd.NewGetInstancesHealthStatusPaginator(req)
+	for p.Next(context.Background()) {
 		for id, health := range p.CurrentPage().Status {
 			result[id] = statusFromAWS(health)
 		}
@@ -273,9 +295,9 @@ func (a *aws) fetchNodes(id string) ([]sd.InstanceSummary, error) {
 	req := a.client.ListInstancesRequest(&sd.ListInstancesInput{
 		ServiceId: &id,
 	})
-	p := req.Paginate()
+	p := sd.NewListInstancesPaginator(req)
 	nodes := []sd.InstanceSummary{}
-	for p.Next() {
+	for p.Next(context.Background()) {
 		nodes = append(nodes, p.CurrentPage().Instances...)
 	}
 	return nodes, p.Err()
@@ -287,7 +309,7 @@ func (a *aws) discoverNodes(name string) ([]sd.InstanceSummary, error) {
 		NamespaceName: x.String(a.namespace.name),
 		ServiceName:   x.String(name),
 	})
-	resp, err := req.Send()
+	resp, err := req.Send(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -296,6 +318,37 @@ func (a *aws) discoverNodes(name string) ([]sd.InstanceSummary, error) {
 		nodes = append(nodes, sd.InstanceSummary{Id: i.InstanceId, Attributes: i.Attributes})
 	}
 	return nodes, nil
+}
+
+func (a *aws) discoverTags(id string, attributes map[string]string) (map[string]string, error) {
+	tags := map[string]string{}
+	ecsClusterName := attributes["ECS_CLUSTER_NAME"]
+	ecsServiceName := attributes["ECS_SERVICE_NAME"]
+	ecsTaskDefinitionFamily := attributes["ECS_TASK_DEFINITION_FAMILY"]
+	// If this is an ECS service we look for tags in the ECS task
+	if ecsClusterName != "" && ecsServiceName != "" && ecsTaskDefinitionFamily != "" {
+		config, err := subcommand.AWSConfig()
+		if err != nil {
+			return tags, err
+		}
+		client := ecs.New(config)
+		input := &ecs.DescribeTasksInput{
+			Cluster: &ecsClusterName,
+			Tasks:   []string{id},
+			Include: []ecs.TaskField{ecs.TaskFieldTags},
+		}
+		req := client.DescribeTasksRequest(input)
+		tasks, err := req.Send(context.Background())
+		if err != nil {
+			return tags, err
+		}
+		for _, task := range tasks.Tasks {
+			for _, t := range task.Tags {
+				tags[*t.Key] = *t.Value
+			}
+		}
+	}
+	return tags, nil
 }
 
 func (a *aws) getServices() map[string]service {
@@ -340,7 +393,7 @@ func (a *aws) create(services map[string]service) int {
 				}
 			}
 			req := a.client.CreateServiceRequest(&input)
-			resp, err := req.Send()
+			resp, err := req.Send(context.Background())
 			if err != nil {
 				if err, ok := err.(awserr.Error); ok {
 					switch err.Code() {
@@ -369,7 +422,7 @@ func (a *aws) create(services map[string]service) int {
 						Attributes: attributes,
 						InstanceId: &instanceID,
 					})
-					_, err := req.Send()
+					_, err := req.Send(context.Background())
 					if err != nil {
 						a.log.Error("cannot create nodes", "error", err.Error())
 					}
@@ -411,7 +464,7 @@ func (a *aws) remove(services map[string]service) int {
 						ServiceId:  &serviceID,
 						InstanceId: &id,
 					})
-					_, err := req.Send()
+					_, err := req.Send(context.Background())
 					if err != nil {
 						a.log.Error("cannot remove instance", "error", err.Error())
 					}
@@ -433,7 +486,7 @@ func (a *aws) remove(services map[string]service) int {
 		req := a.client.DeleteServiceRequest(&sd.DeleteServiceInput{
 			Id: &s.awsID,
 		})
-		_, err := req.Send()
+		_, err := req.Send(context.Background())
 		if err != nil {
 			a.log.Error("cannot remove services", "name", k, "id", s.awsID, "error", err.Error())
 		} else {

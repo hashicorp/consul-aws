@@ -48,7 +48,10 @@ func TestConsulRekeyHealths(t *testing.T) {
 func TestConsulTransformServices(t *testing.T) {
 	c := consul{awsPrefix: "aws_"}
 	services := map[string][]string{"s1": {"abc"}, "aws_s2": {ConsulAWSTag}}
-	expected := map[string]service{"s1": {id: "s1", name: "s1", consulID: "s1"}, "s2": {id: "aws_s2", name: "s2", consulID: "aws_s2", fromAWS: true}}
+	expected := map[string]service{
+		"s1": {id: "s1", name: "s1", consulID: "s1", tags: map[string]string{}},
+		"s2": {id: "aws_s2", name: "s2", consulID: "aws_s2", fromAWS: true, tags: map[string]string{}},
+	}
 
 	require.Equal(t, expected, c.transformServices(services))
 }

@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"testing"
@@ -142,7 +143,7 @@ func deleteServiceInConsul(c *api.Client, id string) {
 	c.Catalog().Deregister(&api.CatalogDeregistration{Node: ConsulAWSNodeName, ServiceID: id}, nil)
 }
 
-func createServiceInAWS(a *sd.ServiceDiscovery, namespaceID, name string) (string, error) {
+func createServiceInAWS(a *sd.Client, namespaceID, name string) (string, error) {
 	ttl := int64(60)
 	input := sd.CreateServiceInput{
 		Name:        &name,
@@ -156,14 +157,14 @@ func createServiceInAWS(a *sd.ServiceDiscovery, namespaceID, name string) (strin
 		},
 	}
 	req := a.CreateServiceRequest(&input)
-	resp, err := req.Send()
+	resp, err := req.Send(context.Background())
 	if err != nil {
 		return "", err
 	}
 	return *resp.Service.Id, nil
 }
 
-func createInstanceInAWS(a *sd.ServiceDiscovery, serviceID string) error {
+func createInstanceInAWS(a *sd.Client, serviceID string) error {
 	req := a.RegisterInstanceRequest(&sd.RegisterInstanceInput{
 		ServiceId:  &serviceID,
 		InstanceId: &serviceID,
@@ -173,21 +174,21 @@ func createInstanceInAWS(a *sd.ServiceDiscovery, serviceID string) error {
 			"FUBAR":             "BARFU",
 		},
 	})
-	_, err := req.Send()
+	_, err := req.Send(context.Background())
 	return err
 }
 
-func deleteInstanceInAWS(a *sd.ServiceDiscovery, id string) error {
+func deleteInstanceInAWS(a *sd.Client, id string) error {
 	req := a.DeregisterInstanceRequest(&sd.DeregisterInstanceInput{ServiceId: &id, InstanceId: &id})
-	_, err := req.Send()
+	_, err := req.Send(context.Background())
 	return err
 }
 
-func deleteServiceInAWS(a *sd.ServiceDiscovery, id string) error {
+func deleteServiceInAWS(a *sd.Client, id string) error {
 	var err error
 	for i := 0; i < 50; i++ {
 		req := a.DeleteServiceRequest(&sd.DeleteServiceInput{Id: &id})
-		_, err = req.Send()
+		_, err = req.Send(context.Background())
 		if err != nil {
 			time.Sleep(100 * time.Millisecond)
 		} else {
@@ -239,7 +240,7 @@ func checkForImportedAWSService(c *api.Client, name, namespaceID, serviceID stri
 	return fmt.Errorf("shrug")
 }
 
-func checkForImportedConsulService(a *sd.ServiceDiscovery, namespaceID, name string, repeat int) error {
+func checkForImportedConsulService(a *sd.Client, namespaceID, name string, repeat int) error {
 	for i := 0; i < repeat; i++ {
 		req := a.ListServicesRequest(&sd.ListServicesInput{
 			Filters: []sd.ServiceFilter{{
@@ -248,8 +249,8 @@ func checkForImportedConsulService(a *sd.ServiceDiscovery, namespaceID, name str
 				Values:    []string{namespaceID},
 			}},
 		})
-		p := req.Paginate()
-		for p.Next() {
+		p := sd.NewListServicesPaginator(req)
+		for p.Next(context.Background()) {
 			for _, s := range p.CurrentPage().Services {
 				if *s.Name == name {
 					if !(s.Description != nil || *s.Description == awsServiceDescription) {
@@ -260,7 +261,7 @@ func checkForImportedConsulService(a *sd.ServiceDiscovery, namespaceID, name str
 						ireq := a.ListInstancesRequest(&sd.ListInstancesInput{
 							ServiceId: s.Id,
 						})
-						out, err := ireq.Send()
+						out, err := ireq.Send(context.Background())
 						if err != nil {
 							continue
 						}

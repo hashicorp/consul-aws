@@ -10,7 +10,7 @@ import (
 )
 
 type mSDClint struct {
-	sdi.ServiceDiscoveryAPI
+	sdi.ClientAPI
 }
 
 func (m *mSDClint) CreateServiceRequest(input *sd.CreateServiceRequest) (*sd.CreateServiceOutput, error) {
