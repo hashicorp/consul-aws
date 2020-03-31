@@ -3,8 +3,8 @@ version: 2.1
 references:
   images:
     go: &GOLANG_IMAGE circleci/golang:1.12.4
-    consul-current: &CONSUL_IMAGE_CURRENT consul:1.4.4
-    consul-previous: &CONSUL_IMAGE_PREVIOUS consul:1.4.3
+    consul-current: &CONSUL_IMAGE_CURRENT consul:1.7.2
+    consul-previous: &CONSUL_IMAGE_PREVIOUS consul:1.6.4
 
 # reusable 'executor' object for jobs
 executors:

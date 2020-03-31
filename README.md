@@ -78,6 +78,6 @@ go test ./... -run SomeTestFunction_name
 
 ## Compatibility with Consul
 
-`consul-aws` supports the current version of Consul and the version before. At the time of writing this, it means `1.4` and `1.3`.
+`consul-aws` supports the current version of Consul and the version before. At the time of writing this, it means `1.7` and `1.6`.
 
 [releases]: https://releases.hashicorp.com/consul-aws "Consul-AWS Releases"
