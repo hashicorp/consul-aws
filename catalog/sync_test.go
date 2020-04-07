@@ -149,7 +149,6 @@ func createServiceInAWS(a *sd.ServiceDiscovery, namespaceID, name string) (strin
 		NamespaceId: &namespaceID,
 		DnsConfig: &sd.DnsConfig{
 			DnsRecords: []sd.DnsRecord{
-				{TTL: &ttl, Type: sd.RecordTypeA},
 				{TTL: &ttl, Type: sd.RecordTypeSrv},
 			},
 			RoutingPolicy: sd.RoutingPolicyMultivalue,
