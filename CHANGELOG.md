@@ -1,4 +1,10 @@
-## 0.1.2 (UNRELEASED)
+## UNRELEASED
+
+## 0.1.2
+
+IMPROVEMENTS:
+
+*  Do not create Cloud Map services with A+SRV DNS records [[GH-20](https://github.com/hashicorp/consul-aws/pull/20)]
 
 ## 0.1.1 (Dezember 20, 2018)
 
