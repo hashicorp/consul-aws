@@ -11,6 +11,7 @@ import (
 	"github.com/hashicorp/consul-aws/catalog"
 	"github.com/hashicorp/consul-aws/subcommand"
 	"github.com/hashicorp/consul/command/flags"
+	hclog "github.com/hashicorp/go-hclog"
 	"github.com/mitchellh/cli"
 )
 
@@ -24,6 +25,7 @@ type Command struct {
 	http                          *flags.HTTPFlags
 	flagToConsul                  bool
 	flagToAWS                     bool
+	flagAWSNamespace              string
 	flagAWSNamespaceID            string
 	flagAWSServicePrefix          string
 	flagAWSDeprecatedPullInterval string
@@ -42,6 +44,8 @@ func (c *Command) init() {
 		"If true, AWS services will be synced to Consul. (Defaults to false)")
 	c.flags.BoolVar(&c.flagToAWS, "to-aws", false,
 		"If true, Consul services will be synced to AWS. (Defaults to false)")
+	c.flags.StringVar(&c.flagAWSNamespace, "aws-namespace",
+		"", "The AWS namespace to sync with Consul services.")
 	c.flags.StringVar(&c.flagAWSNamespaceID, "aws-namespace-id",
 		"", "The AWS namespace to sync with Consul services.")
 	c.flags.StringVar(&c.flagAWSServicePrefix, "aws-service-prefix",
@@ -78,8 +82,12 @@ func (c *Command) Run(args []string) int {
 		c.UI.Error("Should have no non-flag arguments.")
 		return 1
 	}
-	if len(c.flagAWSNamespaceID) == 0 {
-		c.UI.Error("Please provide -aws-namespace-id.")
+	if len(c.flagAWSNamespaceID) == 0 && len(c.flagAWSNamespace) == 0 {
+		c.UI.Error("Please provide -aws-namespace or -aws-namespace-id.")
+		return 1
+	}
+	if len(c.flagAWSNamespaceID) > 0 && len(c.flagAWSNamespace) > 0 {
+		c.UI.Error("Please provide -aws-namespace or -aws-namespace-id.")
 		return 1
 	}
 	config, err := subcommand.AWSConfig()
@@ -88,6 +96,28 @@ func (c *Command) Run(args []string) int {
 		return 1
 	}
 	awsClient := sd.New(config)
+
+	if len(c.flagAWSNamespace) > 0 {
+
+		resp := awsClient.ListNamespacesRequest(&sd.ListNamespacesInput{})
+		pager := resp.Paginate()
+		for pager.Next() {
+			page := pager.CurrentPage()
+			for _, namespace := range page.Namespaces {
+				if c.flagAWSNamespace == *namespace.Name {
+					hclog.Default().Info("NamespaceId found", *namespace.Id)
+					c.flagAWSNamespaceID = *namespace.Id
+				}
+			}
+		}
+		if err := pager.Err(); err != nil {
+			panic("paging failed, " + err.Error())
+		}
+	}
+
+	if len(c.flagAWSNamespaceID) == 0 {
+		panic("Namespace not found, aborting...")
+	}
 
 	consulClient, err := c.http.APIClient()
 	if err != nil {
