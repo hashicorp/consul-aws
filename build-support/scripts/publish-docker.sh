@@ -1,4 +1,7 @@
 #!/bin/bash
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: MPL-2.0
+
 
 # Description:
 #   This script will publish consul-aws containers to Dockerhub. It should only run on tagged
