@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: MPL-2.0
+
 FROM golang:1.14.1 as builder
 ARG GIT_COMMIT
 ARG GIT_DIRTY

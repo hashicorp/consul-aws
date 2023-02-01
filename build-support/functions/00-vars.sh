@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: MPL-2.0
+
 PROJECT="consul-aws"
 
 # GPG Key ID to use for publically released builds
