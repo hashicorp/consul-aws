@@ -5,12 +5,13 @@ package catalog
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/hashicorp/consul/api"
-	"github.com/hashicorp/go-hclog"
+	hclog "github.com/hashicorp/go-hclog"
 )
 
 const (
@@ -305,11 +306,18 @@ func (c *consul) create(services map[string]service) int {
 					meta[ConsulSourceKey] = ConsulAWSTag
 					meta[ConsulAWSNS] = ns
 					meta[ConsulAWSID] = n.awsID
+
+					p, err := strconv.Atoi(n.attributes["Port"])
+					if err != nil {
+						panic("Bad port")
+					}
+
 					service := api.AgentService{
 						ID:      id,
 						Service: name,
 						Tags:    []string{ConsulAWSTag},
-						Address: h,
+						Address: n.attributes["Address"],
+						Port:    p,
 						Meta:    meta,
 					}
 					if n.port != 0 {
@@ -317,12 +325,12 @@ func (c *consul) create(services map[string]service) int {
 					}
 					reg := api.CatalogRegistration{
 						Node:           ConsulAWSNodeName,
-						Address:        h,
+						Address:        "127.0.0.1",
 						NodeMeta:       map[string]string{ConsulSourceKey: ConsulAWSTag},
 						SkipNodeUpdate: true,
 						Service:        &service,
 					}
-					_, err := c.client.Catalog().Register(&reg, nil)
+					_, err = c.client.Catalog().Register(&reg, nil)
 					if err != nil {
 						c.log.Error("cannot create service", "error", err.Error())
 					} else {
