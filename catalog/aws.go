@@ -31,17 +31,18 @@ type namespace struct {
 }
 
 type aws struct {
-	lock         sync.RWMutex
-	client       *sd.ServiceDiscovery
-	log          hclog.Logger
-	namespace    namespace
-	services     map[string]service
-	trigger      chan bool
-	consulPrefix string
-	awsPrefix    string
-	toConsul     bool
-	pullInterval time.Duration
-	dnsTTL       int64
+	lock            sync.RWMutex
+	client          *sd.ServiceDiscovery
+	log             hclog.Logger
+	namespace       namespace
+	services        map[string]service
+	trigger         chan bool
+	consulPrefix    string
+	awsPrefix       string
+	toConsul        bool
+	pullInterval    time.Duration
+	dnsTTL          int64
+	consulNamespace string
 }
 
 var awsServiceDescription = "Imported from Consul"
@@ -446,7 +447,7 @@ func (a *aws) remove(services map[string]service) int {
 	return count
 }
 
-func (a *aws) fetchIndefinetely(stop, stopped chan struct{}) {
+func (a *aws) fetchIndefinitely(stop, stopped chan struct{}) {
 	defer close(stopped)
 	for {
 		err := a.fetch()

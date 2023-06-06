@@ -43,7 +43,7 @@ func runSyncTest(t *testing.T, namespaceID string) {
 	cName := "redis"
 	aName := "web"
 
-	err = createServiceInConsul(c, cID, cName)
+	err = createServiceInConsul(c, cID, cName, "default", "default")
 	if err != nil {
 		t.Fatalf("error creating service in Consul: %s", err)
 	}
@@ -59,13 +59,22 @@ func runSyncTest(t *testing.T, namespaceID string) {
 
 	stop := make(chan struct{})
 	stopped := make(chan struct{})
-	go Sync(
-		true, true, namespaceID,
-		"consul_", "aws_",
-		"0", 0, true,
-		a, c,
-		stop, stopped,
-	)
+	syncInput := &SyncInput{
+		ToAWS:                true,
+		ToConsul:             true,
+		AWSNamespaceID:       namespaceID,
+		ConsulPrefix:         "consul_",
+		AWSPrefix:            "aws_",
+		AWSPullInterval:      "0",
+		AWSDNSTTL:            0,
+		Stale:                true,
+		AWSClient:            a,
+		ConsulClient:         c,
+		ConsulNamespace:      "default",
+		ConsulAdminPartition: "default",
+	}
+
+	go Sync(syncInput, stop, stopped)
 
 	doneC := make(chan struct{})
 	doneA := make(chan struct{})
@@ -107,7 +116,7 @@ func runSyncTest(t *testing.T, namespaceID string) {
 	if err != nil {
 		t.Logf("error deleting service: %s", err)
 	}
-	deleteServiceInConsul(c, cID)
+	deleteServiceInConsul(c, cID, "default", "default")
 
 	select {
 	case <-time.After((WaitTime * 3) * time.Second):
@@ -122,7 +131,7 @@ func runSyncTest(t *testing.T, namespaceID string) {
 	close(stop)
 	<-stopped
 }
-func createServiceInConsul(c *api.Client, id, name string) error {
+func createServiceInConsul(c *api.Client, id, name string, namespace string, adminPartition string) error {
 	reg := api.CatalogRegistration{
 		Node:           ConsulAWSNodeName,
 		Address:        "127.0.0.1",
@@ -135,14 +144,22 @@ func createServiceInConsul(c *api.Client, id, name string) error {
 			Meta: map[string]string{
 				"BARFU": "FUBAR",
 			},
+			Namespace: namespace,
+			Partition: adminPartition,
 		},
+		Partition: adminPartition,
 	}
 	_, err := c.Catalog().Register(&reg, nil)
 	return err
 }
 
-func deleteServiceInConsul(c *api.Client, id string) {
-	c.Catalog().Deregister(&api.CatalogDeregistration{Node: ConsulAWSNodeName, ServiceID: id}, nil)
+func deleteServiceInConsul(c *api.Client, id, namespace, adminPartition string) {
+	c.Catalog().Deregister(&api.CatalogDeregistration{
+		Node:      ConsulAWSNodeName,
+		ServiceID: id,
+		Partition: adminPartition,
+		Namespace: namespace,
+	}, nil)
 }
 
 func createServiceInAWS(a *sd.ServiceDiscovery, namespaceID, name string) (string, error) {
