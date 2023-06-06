@@ -31,18 +31,17 @@ type namespace struct {
 }
 
 type aws struct {
-	lock            sync.RWMutex
-	client          *sd.ServiceDiscovery
-	log             hclog.Logger
-	namespace       namespace
-	services        map[string]service
-	trigger         chan bool
-	consulPrefix    string
-	awsPrefix       string
-	toConsul        bool
-	pullInterval    time.Duration
-	dnsTTL          int64
-	consulNamespace string
+	lock         sync.RWMutex
+	client       *sd.ServiceDiscovery
+	log          hclog.Logger
+	namespace    namespace
+	services     map[string]service
+	trigger      chan bool
+	consulPrefix string
+	awsPrefix    string
+	toConsul     bool
+	pullInterval time.Duration
+	dnsTTL       int64
 }
 
 var awsServiceDescription = "Imported from Consul"
