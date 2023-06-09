@@ -18,9 +18,7 @@ import (
 )
 
 const (
-	DefaultPollInterval         = "30s"
-	DefaultConsulNamespace      = "default"
-	DefaultConsulAdminPartition = "default"
+	DefaultPollInterval = "30s"
 )
 
 // Command is the command for syncing the A
@@ -72,13 +70,13 @@ func (c *Command) init() {
 	c.flags.Int64Var(&c.flagAWSDNSTTL, "aws-dns-ttl",
 		60, "DNS TTL for services created in AWS CloudMap in seconds. (Defaults to 60)")
 
-	c.flags.StringVar(&c.flagConsulNamespace, "consul-namespace", DefaultConsulNamespace,
+	c.flags.StringVar(&c.flagConsulNamespace, "consul-namespace", "",
 		"The Consul namespace to which the AWS services will be synced."+
-			"Defaults to the default namespace within the cluster.")
+			"Defaults to an empty string to support non enterprise scenarios.")
 
-	c.flags.StringVar(&c.flagConsulAdminPartition, "consul-admin-partition", DefaultConsulAdminPartition,
+	c.flags.StringVar(&c.flagConsulAdminPartition, "consul-admin-partition", "",
 		"The Consul admin partition to which the AWS services will be synced."+
-			"Defaults to the default admin partition within the cluster.")
+			"Defaults to an empty string to support non enterprise scenarios.")
 
 	c.http = &flags.HTTPFlags{}
 	flags.Merge(c.flags, c.http.ClientFlags())
