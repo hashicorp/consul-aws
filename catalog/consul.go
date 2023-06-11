@@ -234,6 +234,7 @@ func (c *consul) fetch(waitIndex uint64) (uint64, error) {
 		}
 		if s.fromAWS {
 			s.healths = c.rekeyHealths(s.name, s.healths)
+			id = strings.TrimPrefix(id, c.awsPrefix)
 		}
 		services[id] = s
 	}
@@ -299,10 +300,6 @@ func (c *consul) fetchIndefinitely(stop, stopped chan struct{}) {
 func (c *consul) create(services map[string]service) int {
 	wg := sync.WaitGroup{}
 	count := 0
-	writeOpts := &api.WriteOptions{
-		Namespace: c.namespace,
-		Partition: c.adminPartition,
-	}
 	for k, s := range services {
 		if s.fromConsul {
 			continue
@@ -341,7 +338,7 @@ func (c *consul) create(services map[string]service) int {
 						Service:        &service,
 						Partition:      c.adminPartition,
 					}
-					_, err := c.client.Catalog().Register(&reg, writeOpts)
+					_, err := c.client.Catalog().Register(&reg, nil)
 					if err != nil {
 						c.log.Error("cannot create service", "error", err.Error())
 					} else {
@@ -373,7 +370,7 @@ func (c *consul) create(services map[string]service) int {
 					},
 					Partition: c.adminPartition,
 				}
-				_, err := c.client.Catalog().Register(&reg, writeOpts)
+				_, err := c.client.Catalog().Register(&reg, nil)
 				if err != nil {
 					c.log.Error("cannot create healthcheck", "id", id(k, n.host, n.port), "error", err.Error())
 				} else {
@@ -405,11 +402,7 @@ func (c *consul) remove(services map[string]service) int {
 						Partition: c.adminPartition,
 					}
 
-					writeOpts := &api.WriteOptions{
-						Namespace: c.namespace,
-						Partition: c.adminPartition,
-					}
-					_, err := c.client.Catalog().Deregister(deregistrationInput, writeOpts)
+					_, err := c.client.Catalog().Deregister(deregistrationInput, nil)
 					if err != nil {
 						c.log.Error("cannot remove service", "error", err.Error())
 					} else {

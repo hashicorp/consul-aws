@@ -163,11 +163,7 @@ func createServiceInConsul(c *api.Client, id, name string, namespace string, adm
 		Partition: adminPartition,
 	}
 
-	writeOpts := &api.WriteOptions{
-		Partition: adminPartition,
-		Namespace: namespace,
-	}
-	_, err := c.Catalog().Register(&reg, writeOpts)
+	_, err := c.Catalog().Register(&reg, nil)
 	return err
 }
 

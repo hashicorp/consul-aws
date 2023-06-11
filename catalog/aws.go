@@ -138,7 +138,7 @@ func (a *aws) fetch() error {
 		return err
 	}
 	services := a.transformServices(awsService)
-	for h, s := range services {
+	for h, s := range a.transformServices(awsService) {
 		var awsNodes []sd.InstanceSummary
 		var err error
 		name := s.name
