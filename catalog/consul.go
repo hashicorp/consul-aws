@@ -19,15 +19,17 @@ const (
 )
 
 type consul struct {
-	client       *api.Client
-	log          hclog.Logger
-	consulPrefix string
-	awsPrefix    string
-	services     map[string]service
-	trigger      chan bool
-	lock         sync.RWMutex
-	toAWS        bool
-	stale        bool
+	client         *api.Client
+	log            hclog.Logger
+	consulPrefix   string
+	awsPrefix      string
+	services       map[string]service
+	trigger        chan bool
+	lock           sync.RWMutex
+	toAWS          bool
+	stale          bool
+	namespace      string
+	adminPartition string
 }
 
 func (c *consul) getServices() map[string]service {
@@ -153,7 +155,11 @@ func (c *consul) transformNodes(cnodes []*api.CatalogService) map[string]map[int
 }
 
 func (c *consul) fetchNodes(service string) ([]*api.CatalogService, error) {
-	opts := &api.QueryOptions{AllowStale: c.stale}
+	opts := &api.QueryOptions{
+		AllowStale: c.stale,
+		Namespace:  c.namespace,
+		Partition:  c.adminPartition,
+	}
 	nodes, _, err := c.client.Catalog().Service(service, "", opts)
 	if err != nil {
 		return nil, fmt.Errorf("error querying services, will retry: %s", err)
@@ -177,7 +183,11 @@ func (c *consul) transformHealth(chealths api.HealthChecks) map[string]health {
 }
 
 func (c *consul) fetchHealth(name string) (api.HealthChecks, error) {
-	opts := &api.QueryOptions{AllowStale: c.stale}
+	opts := &api.QueryOptions{
+		AllowStale: c.stale,
+		Namespace:  c.namespace,
+		Partition:  c.adminPartition,
+	}
 	status, _, err := c.client.Health().Checks(name, opts)
 	if err != nil {
 		return nil, fmt.Errorf("error querying health, will retry: %s", err)
@@ -187,6 +197,8 @@ func (c *consul) fetchHealth(name string) (api.HealthChecks, error) {
 
 func (c *consul) fetchServices(waitIndex uint64) (map[string][]string, uint64, error) {
 	opts := &api.QueryOptions{
+		Namespace:  c.namespace,
+		Partition:  c.adminPartition,
 		AllowStale: c.stale,
 		WaitIndex:  waitIndex,
 		WaitTime:   WaitTime * time.Second,
@@ -222,6 +234,7 @@ func (c *consul) fetch(waitIndex uint64) (uint64, error) {
 		}
 		if s.fromAWS {
 			s.healths = c.rekeyHealths(s.name, s.healths)
+			id = strings.TrimPrefix(id, c.awsPrefix)
 		}
 		services[id] = s
 	}
@@ -258,7 +271,7 @@ func (c *consul) rekeyHealths(name string, healths map[string]health) map[string
 	return rekeyed
 }
 
-func (c *consul) fetchIndefinetely(stop, stopped chan struct{}) {
+func (c *consul) fetchIndefinitely(stop, stopped chan struct{}) {
 	defer close(stopped)
 	waitIndex := uint64(1)
 	subsequentErrors := 0
@@ -306,11 +319,13 @@ func (c *consul) create(services map[string]service) int {
 					meta[ConsulAWSNS] = ns
 					meta[ConsulAWSID] = n.awsID
 					service := api.AgentService{
-						ID:      id,
-						Service: name,
-						Tags:    []string{ConsulAWSTag},
-						Address: h,
-						Meta:    meta,
+						ID:        id,
+						Service:   name,
+						Tags:      []string{ConsulAWSTag},
+						Address:   h,
+						Meta:      meta,
+						Namespace: c.namespace,
+						Partition: c.adminPartition,
 					}
 					if n.port != 0 {
 						service.Port = n.port
@@ -321,6 +336,7 @@ func (c *consul) create(services map[string]service) int {
 						NodeMeta:       map[string]string{ConsulSourceKey: ConsulAWSTag},
 						SkipNodeUpdate: true,
 						Service:        &service,
+						Partition:      c.adminPartition,
 					}
 					_, err := c.client.Catalog().Register(&reg, nil)
 					if err != nil {
@@ -349,7 +365,10 @@ func (c *consul) create(services map[string]service) int {
 						Node:      "consul-aws",
 						Name:      "AWS Route53 Health Check",
 						Status:    string(h),
+						Namespace: c.namespace,
+						Partition: c.adminPartition,
 					},
+					Partition: c.adminPartition,
 				}
 				_, err := c.client.Catalog().Register(&reg, nil)
 				if err != nil {
@@ -376,7 +395,14 @@ func (c *consul) remove(services map[string]service) int {
 				wg.Add(1)
 				go func(id string) {
 					defer wg.Done()
-					_, err := c.client.Catalog().Deregister(&api.CatalogDeregistration{Node: ConsulAWSNodeName, ServiceID: id}, nil)
+					deregistrationInput := &api.CatalogDeregistration{
+						Node:      ConsulAWSNodeName,
+						ServiceID: id,
+						Namespace: c.namespace,
+						Partition: c.adminPartition,
+					}
+
+					_, err := c.client.Catalog().Deregister(deregistrationInput, nil)
 					if err != nil {
 						c.log.Error("cannot remove service", "error", err.Error())
 					} else {

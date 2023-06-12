@@ -11,36 +11,57 @@ import (
 	"github.com/hashicorp/go-hclog"
 )
 
+type SyncInput struct {
+	ToAWS    bool
+	ToConsul bool
+
+	ConsulPrefix         string
+	ConsulNamespace      string
+	ConsulAdminPartition string
+
+	AWSNamespaceID  string
+	AWSPrefix       string
+	AWSPullInterval string
+	AWSDNSTTL       int64
+
+	Stale bool
+
+	AWSClient    *sd.ServiceDiscovery
+	ConsulClient *api.Client
+}
+
 // Sync aws->consul and vice versa.
-func Sync(toAWS, toConsul bool, namespaceID, consulPrefix, awsPrefix, awsPullInterval string, awsDNSTTL int64, stale bool, awsClient *sd.ServiceDiscovery, consulClient *api.Client, stop, stopped chan struct{}) {
+func Sync(input *SyncInput, stop, stopped chan struct{}) {
 	defer close(stopped)
 	log := hclog.Default().Named("sync")
 	consul := consul{
-		client:       consulClient,
-		log:          hclog.Default().Named("consul"),
-		trigger:      make(chan bool, 1),
-		consulPrefix: consulPrefix,
-		awsPrefix:    awsPrefix,
-		toAWS:        toAWS,
-		stale:        stale,
+		client:         input.ConsulClient,
+		log:            hclog.Default().Named("consul"),
+		trigger:        make(chan bool, 1),
+		consulPrefix:   input.ConsulPrefix,
+		awsPrefix:      input.AWSPrefix,
+		toAWS:          input.ToAWS,
+		stale:          input.Stale,
+		namespace:      input.ConsulNamespace,
+		adminPartition: input.ConsulAdminPartition,
 	}
-	pullInterval, err := time.ParseDuration(awsPullInterval)
+	pullInterval, err := time.ParseDuration(input.AWSPullInterval)
 	if err != nil {
 		log.Error("cannot parse aws pull interval", "error", err)
 		return
 	}
 	aws := aws{
-		client:       awsClient,
+		client:       input.AWSClient,
 		log:          hclog.Default().Named("aws"),
 		trigger:      make(chan bool, 1),
-		consulPrefix: consulPrefix,
-		awsPrefix:    awsPrefix,
-		toConsul:     toConsul,
+		consulPrefix: input.ConsulPrefix,
+		awsPrefix:    input.AWSPrefix,
+		toConsul:     input.ToConsul,
 		pullInterval: pullInterval,
-		dnsTTL:       awsDNSTTL,
+		dnsTTL:       input.AWSDNSTTL,
 	}
 
-	err = aws.setupNamespace(namespaceID)
+	err = aws.setupNamespace(input.AWSNamespaceID)
 	if err != nil {
 		log.Error("cannot setup namespace", "error", err)
 		return
@@ -48,10 +69,10 @@ func Sync(toAWS, toConsul bool, namespaceID, consulPrefix, awsPrefix, awsPullInt
 
 	fetchConsulStop := make(chan struct{})
 	fetchConsulStopped := make(chan struct{})
-	go consul.fetchIndefinetely(fetchConsulStop, fetchConsulStopped)
+	go consul.fetchIndefinitely(fetchConsulStop, fetchConsulStopped)
 	fetchAWSStop := make(chan struct{})
 	fetchAWSStopped := make(chan struct{})
-	go aws.fetchIndefinetely(fetchAWSStop, fetchAWSStopped)
+	go aws.fetchIndefinitely(fetchAWSStop, fetchAWSStopped)
 
 	toConsulStop := make(chan struct{})
 	toConsulStopped := make(chan struct{})

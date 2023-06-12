@@ -4,6 +4,7 @@
 package catalog
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"testing"
@@ -19,14 +20,14 @@ func TestSync(t *testing.T) {
 	if len(os.Getenv("INTTEST")) == 0 {
 		t.Skip("Set INTTEST=1 to enable integration tests")
 	}
-	namespaceID := os.Getenv("NAMESPACEID")
-	if len(namespaceID) == 0 {
-		namespaceID = "ns-n5qqli2346hqood4"
+	awsNamespaceID := os.Getenv("NAMESPACEID")
+	if len(awsNamespaceID) == 0 {
+		awsNamespaceID = "ns-n5qqli2346hqood4"
 	}
-	runSyncTest(t, namespaceID)
+	runSyncTest(t, awsNamespaceID, "", "")
 }
 
-func runSyncTest(t *testing.T, namespaceID string) {
+func runSyncTest(t *testing.T, awsNamespaceID, adminPartition, namespace string) {
 	config, err := external.LoadDefaultAWSConfig()
 	if err != nil {
 		t.Fatalf("Error retrieving AWS session: %s", err)
@@ -43,12 +44,24 @@ func runSyncTest(t *testing.T, namespaceID string) {
 	cName := "redis"
 	aName := "web"
 
-	err = createServiceInConsul(c, cID, cName)
+	err = tryCreateAdminPartition(c, adminPartition)
+	if err != nil {
+		t.Fatalf("error creating partition in Consul: %s", err)
+	}
+
+	err = tryCreateNamespace(c, namespace, adminPartition)
+	if err != nil {
+		t.Fatalf("error creating namespace in Consul: %s", err)
+	}
+
+	// Creating redis in Consul
+	err = createServiceInConsul(c, cID, cName, namespace, adminPartition)
 	if err != nil {
 		t.Fatalf("error creating service in Consul: %s", err)
 	}
 
-	aID, err := createServiceInAWS(a, namespaceID, aName)
+	// Creating web and instance in AWS
+	aID, err := createServiceInAWS(a, awsNamespaceID, aName)
 	if err != nil {
 		t.Fatalf("error creating service %s in aws: %s", aName, err)
 	}
@@ -59,25 +72,34 @@ func runSyncTest(t *testing.T, namespaceID string) {
 
 	stop := make(chan struct{})
 	stopped := make(chan struct{})
-	go Sync(
-		true, true, namespaceID,
-		"consul_", "aws_",
-		"0", 0, true,
-		a, c,
-		stop, stopped,
-	)
+	syncInput := &SyncInput{
+		ToAWS:                true,
+		ToConsul:             true,
+		AWSNamespaceID:       awsNamespaceID,
+		ConsulPrefix:         "consul_",
+		AWSPrefix:            "aws_",
+		AWSPullInterval:      "0",
+		AWSDNSTTL:            0,
+		Stale:                true,
+		AWSClient:            a,
+		ConsulClient:         c,
+		ConsulNamespace:      namespace,
+		ConsulAdminPartition: adminPartition,
+	}
+
+	go Sync(syncInput, stop, stopped)
 
 	doneC := make(chan struct{})
 	doneA := make(chan struct{})
 	go func() {
-		if err := checkForImportedAWSService(c, "aws_"+aName, namespaceID, aID, 100); err != nil {
+		if err := checkForImportedAWSService(c, "aws_"+aName, awsNamespaceID, aID, 100, syncInput.ConsulNamespace, syncInput.ConsulAdminPartition); err != nil {
 			t.Error(err)
 		} else {
 			close(doneA)
 		}
 	}()
 	go func() {
-		if err := checkForImportedConsulService(a, namespaceID, "consul_"+cName, 100); err != nil {
+		if err := checkForImportedConsulService(a, awsNamespaceID, "consul_"+cName, 100); err != nil {
 			t.Error(err)
 		} else {
 			close(doneC)
@@ -107,22 +129,22 @@ func runSyncTest(t *testing.T, namespaceID string) {
 	if err != nil {
 		t.Logf("error deleting service: %s", err)
 	}
-	deleteServiceInConsul(c, cID)
+	deleteServiceInConsul(c, cID, namespace, adminPartition)
 
 	select {
 	case <-time.After((WaitTime * 3) * time.Second):
 	}
-	if err = checkForImportedAWSService(c, "aws_"+aName, namespaceID, aID, 1); err == nil {
+	if err = checkForImportedAWSService(c, "aws_"+aName, awsNamespaceID, aID, 1, syncInput.ConsulNamespace, syncInput.ConsulAdminPartition); err == nil {
 		t.Error("Expected that the imported aws services is deleted")
 	}
-	if err = checkForImportedConsulService(a, namespaceID, "consul_"+cName, 1); err == nil {
+	if err = checkForImportedConsulService(a, awsNamespaceID, "consul_"+cName, 1); err == nil {
 		t.Error("Expected that the imported consul services is deleted")
 	}
 
 	close(stop)
 	<-stopped
 }
-func createServiceInConsul(c *api.Client, id, name string) error {
+func createServiceInConsul(c *api.Client, id, name string, namespace string, adminPartition string) error {
 	reg := api.CatalogRegistration{
 		Node:           ConsulAWSNodeName,
 		Address:        "127.0.0.1",
@@ -135,14 +157,29 @@ func createServiceInConsul(c *api.Client, id, name string) error {
 			Meta: map[string]string{
 				"BARFU": "FUBAR",
 			},
+			Namespace: namespace,
+			Partition: adminPartition,
 		},
+		Partition: adminPartition,
 	}
+
 	_, err := c.Catalog().Register(&reg, nil)
 	return err
 }
 
-func deleteServiceInConsul(c *api.Client, id string) {
-	c.Catalog().Deregister(&api.CatalogDeregistration{Node: ConsulAWSNodeName, ServiceID: id}, nil)
+func deleteServiceInConsul(c *api.Client, id, namespace, adminPartition string) {
+	c.Catalog().Deregister(
+		&api.CatalogDeregistration{
+			Node:      ConsulAWSNodeName,
+			ServiceID: id,
+			Partition: adminPartition,
+			Namespace: namespace,
+		},
+		&api.WriteOptions{
+			Partition: adminPartition,
+			Namespace: namespace,
+		},
+	)
 }
 
 func createServiceInAWS(a *sd.ServiceDiscovery, namespaceID, name string) (string, error) {
@@ -199,9 +236,13 @@ func deleteServiceInAWS(a *sd.ServiceDiscovery, id string) error {
 	return err
 }
 
-func checkForImportedAWSService(c *api.Client, name, namespaceID, serviceID string, repeat int) error {
+func checkForImportedAWSService(c *api.Client, name, namespaceID, serviceID string, repeat int, namespace, partition string) error {
 	for i := 0; i < repeat; i++ {
-		services, _, err := c.Catalog().Services(nil)
+		opts := &api.QueryOptions{
+			Namespace: namespace,
+			Partition: partition,
+		}
+		services, _, err := c.Catalog().Services(opts)
 		if err == nil {
 			if tags, ok := services[name]; ok {
 				found := false
@@ -213,7 +254,7 @@ func checkForImportedAWSService(c *api.Client, name, namespaceID, serviceID stri
 				if !found {
 					return fmt.Errorf("aws tag is missing on consul service")
 				}
-				cservices, _, err := c.Catalog().Service(name, ConsulAWSTag, nil)
+				cservices, _, err := c.Catalog().Service(name, ConsulAWSTag, opts)
 				if err != nil {
 					return err
 				}
@@ -293,4 +334,40 @@ func checkForImportedConsulService(a *sd.ServiceDiscovery, namespaceID, name str
 		time.Sleep(100 * time.Millisecond)
 	}
 	return fmt.Errorf("shrug")
+}
+
+func tryCreateAdminPartition(c *api.Client, name string) error {
+	if name == "" {
+		return nil
+	}
+
+	partition := &api.Partition{
+		Name:        name,
+		Description: "Partition created for integration tests",
+	}
+	_, _, err := c.Partitions().Create(context.TODO(), partition, nil)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func tryCreateNamespace(c *api.Client, name string, partition string) error {
+	if name == "" {
+		return nil
+	}
+
+	namespace := &api.Namespace{
+		Name:        name,
+		Description: "Namespace created for integration tests",
+		Partition:   partition,
+	}
+
+	_, _, err := c.Namespaces().Create(namespace, nil)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

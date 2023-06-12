@@ -17,7 +17,9 @@ import (
 	"github.com/mitchellh/cli"
 )
 
-const DefaultPollInterval = "30s"
+const (
+	DefaultPollInterval = "30s"
+)
 
 // Command is the command for syncing the A
 type Command struct {
@@ -34,6 +36,8 @@ type Command struct {
 	flagAWSDNSTTL                 int64
 	flagConsulServicePrefix       string
 	flagConsulDomain              string
+	flagConsulNamespace           string
+	flagConsulAdminPartition      string
 
 	once sync.Once
 	help string
@@ -65,6 +69,14 @@ func (c *Command) init() {
 			"Defaults to 30s)")
 	c.flags.Int64Var(&c.flagAWSDNSTTL, "aws-dns-ttl",
 		60, "DNS TTL for services created in AWS CloudMap in seconds. (Defaults to 60)")
+
+	c.flags.StringVar(&c.flagConsulNamespace, "consul-namespace", "",
+		"The Consul namespace to which the AWS services will be synced."+
+			"Defaults to an empty string to support non enterprise scenarios.")
+
+	c.flags.StringVar(&c.flagConsulAdminPartition, "consul-admin-partition", "",
+		"The Consul admin partition to which the AWS services will be synced."+
+			"Defaults to an empty string to support non enterprise scenarios.")
 
 	c.http = &flags.HTTPFlags{}
 	flags.Merge(c.flags, c.http.ClientFlags())
@@ -106,13 +118,23 @@ func (c *Command) Run(args []string) int {
 
 	stop := make(chan struct{})
 	stopped := make(chan struct{})
-	go catalog.Sync(
-		c.flagToAWS, c.flagToConsul, c.flagAWSNamespaceID,
-		c.flagConsulServicePrefix, c.flagAWSServicePrefix,
-		pollInterval, c.flagAWSDNSTTL, c.getStaleWithDefaultTrue(),
-		awsClient, consulClient,
-		stop, stopped,
-	)
+
+	syncInput := &catalog.SyncInput{
+		ToAWS:                c.flagToAWS,
+		ToConsul:             c.flagToConsul,
+		AWSNamespaceID:       c.flagAWSNamespaceID,
+		ConsulPrefix:         c.flagConsulServicePrefix,
+		AWSPrefix:            c.flagAWSServicePrefix,
+		AWSPullInterval:      pollInterval,
+		AWSDNSTTL:            c.flagAWSDNSTTL,
+		Stale:                c.getStaleWithDefaultTrue(),
+		AWSClient:            awsClient,
+		ConsulClient:         consulClient,
+		ConsulNamespace:      c.flagConsulNamespace,
+		ConsulAdminPartition: c.flagConsulAdminPartition,
+	}
+
+	go catalog.Sync(syncInput, stop, stopped)
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt)

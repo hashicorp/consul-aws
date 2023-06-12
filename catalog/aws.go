@@ -446,7 +446,7 @@ func (a *aws) remove(services map[string]service) int {
 	return count
 }
 
-func (a *aws) fetchIndefinetely(stop, stopped chan struct{}) {
+func (a *aws) fetchIndefinitely(stop, stopped chan struct{}) {
 	defer close(stopped)
 	for {
 		err := a.fetch()
