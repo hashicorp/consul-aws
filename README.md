@@ -74,7 +74,7 @@ Or to run a specific test in the suite:
 go test ./... -run SomeTestFunction_name
 ```
 
-**Note:** To run the sync integration tests, you must specify `INTTEST=1` in your environment and [AWS credentials](https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html#specifying-credentials).
+**Note:** To run the sync integration tests, you must specify `INTTEST=1` in your environment and [AWS credentials](https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html#specifying-credentials). To run enterprise based integration tests, you must specify `INTTEST_ENTERPRISE=1` in your environment.
 
 ## Compatibility with Consul
 

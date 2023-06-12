@@ -216,7 +216,7 @@ func (c *consul) fetch(waitIndex uint64) (uint64, error) {
 		return waitIndex, fmt.Errorf("error fetching services: %s", err)
 	}
 	services := c.transformServices(cservices)
-	for id, s := range services {
+	for id, s := range c.transformServices(cservices) {
 		if s.fromAWS {
 			id = c.awsPrefix + id
 		}
