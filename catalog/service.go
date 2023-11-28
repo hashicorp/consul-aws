@@ -27,6 +27,7 @@ type service struct {
 	awsID        string
 	consulID     string
 	awsNamespace string
+	tags         []string
 }
 
 type node struct {
