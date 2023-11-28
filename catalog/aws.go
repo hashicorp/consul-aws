@@ -363,7 +363,7 @@ func (a *aws) create(services map[string]service) int {
 				wg.Add(1)
 				go func(serviceID, name, h string, n node) {
 					wg.Done()
-					instanceID := id(serviceID, h, n.port)
+					instanceID := n.name
 					attributes := n.attributes
 					attributes["AWS_INSTANCE_IPV4"] = h
 					attributes["AWS_INSTANCE_PORT"] = fmt.Sprintf("%d", n.port)

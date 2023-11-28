@@ -138,15 +138,14 @@ func (c *consul) sync(aws *aws, stop, stopped chan struct{}) {
 func (c *consul) transformNodes(cnodes []*api.CatalogService) map[string]map[int]node {
 	nodes := map[string]map[int]node{}
 	for _, n := range cnodes {
-		address := n.ServiceAddress
-		if len(address) == 0 {
-			address = n.Address
-		}
+		// use Address instead of ServiceAddress; RabbitMQ updates the service
+		// address to be its internal DNS instead which breaks stuff
+		address := n.Address
 		if nodes[address] == nil {
 			nodes[address] = map[int]node{}
 		}
 		ports := nodes[address]
-		ports[n.ServicePort] = node{port: n.ServicePort, host: address, consulID: n.ServiceID, awsID: n.ServiceMeta[ConsulAWSID], attributes: n.ServiceMeta}
+		ports[n.ServicePort] = node{name: n.Node, port: n.ServicePort, host: address, consulID: n.ServiceID, awsID: n.ServiceMeta[ConsulAWSID], attributes: n.ServiceMeta}
 		nodes[address] = ports
 	}
 	return nodes

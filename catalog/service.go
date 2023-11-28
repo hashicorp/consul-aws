@@ -30,6 +30,7 @@ type service struct {
 }
 
 type node struct {
+	name       string
 	port       int
 	host       string
 	awsID      string
