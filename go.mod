@@ -1,46 +1,60 @@
 module github.com/hashicorp/consul-aws
 
-go 1.14
+go 1.22.2
 
 require (
-	github.com/DataDog/datadog-go v0.0.0-20180822151419-281ae9f2d895 // indirect
-	github.com/armon/go-metrics v0.0.0-20180917152333-f0300d1749da // indirect
-	github.com/aws/aws-sdk-go-v2 v0.6.0
-	github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973 // indirect
-	github.com/circonus-labs/circonus-gometrics v2.2.4+incompatible // indirect
-	github.com/circonus-labs/circonusllhist v0.1.2 // indirect
-	github.com/gogo/protobuf v1.1.1 // indirect
-	github.com/hashicorp/consul v1.4.0
-	github.com/hashicorp/go-hclog v0.0.0-20181001195459-61d530d6c27f
-	github.com/hashicorp/go-immutable-radix v1.0.0 // indirect
-	github.com/hashicorp/go-msgpack v0.0.0-20150518234257-fa3f63826f7c // indirect
-	github.com/hashicorp/go-retryablehttp v0.5.0 // indirect
-	github.com/hashicorp/go-rootcerts v0.0.0-20160503143440-6bb64b370b90 // indirect
-	github.com/hashicorp/go-sockaddr v0.0.0-20180320115054-6d291a969b86 // indirect
-	github.com/hashicorp/memberlist v0.1.0 // indirect
-	github.com/hashicorp/serf v0.8.1 // indirect
-	github.com/hashicorp/yamux v0.0.0-20181012175058-2f1d1f20f75d // indirect
-	github.com/jmespath/go-jmespath v0.0.0-20180206201540-c2b33e8439af // indirect
-	github.com/kr/pretty v0.1.0 // indirect
-	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
-	github.com/miekg/dns v1.0.15 // indirect
-	github.com/mitchellh/cli v1.0.0
-	github.com/mitchellh/go-homedir v1.0.0 // indirect
-	github.com/mitchellh/go-testing-interface v1.0.0 // indirect
-	github.com/mitchellh/mapstructure v1.1.2 // indirect
-	github.com/pascaldekloe/goe v0.0.0-20180627143212-57f6aae5913c // indirect
-	github.com/prometheus/client_golang v0.9.1 // indirect
-	github.com/prometheus/client_model v0.0.0-20180712105110-5c3871d89910 // indirect
-	github.com/prometheus/common v0.0.0-20181120120127-aeab699e26f4 // indirect
-	github.com/prometheus/procfs v0.0.0-20181005140218-185b4288413d // indirect
-	github.com/sean-/seed v0.0.0-20170313163322-e2103e2c3529 // indirect
-	github.com/stretchr/testify v1.2.2
-	github.com/tv42/httpunix v0.0.0-20150427012821-b75d8614f926 // indirect
-	golang.org/x/crypto v0.0.0-20181112202954-3d3f9f413869 // indirect
-	golang.org/x/sync v0.0.0-20181108010431-42b317875d0f // indirect
-	google.golang.org/appengine v1.3.0 // indirect
-	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
-	gopkg.in/vmihailenco/msgpack.v2 v2.9.1 // indirect
-	labix.org/v2/mgo v0.0.0-20140701140051-000000000287 // indirect
-	launchpad.net/gocheck v0.0.0-20140225173054-000000000087 // indirect
+	github.com/aws/aws-sdk-go-v2 v1.26.1
+	github.com/aws/aws-sdk-go-v2/config v1.27.10
+	github.com/aws/aws-sdk-go-v2/service/servicediscovery v1.29.4
+	github.com/hashicorp/consul/api v1.28.2
+	github.com/hashicorp/go-hclog v1.6.3
+	github.com/kr/text v0.2.0
+	github.com/mitchellh/cli v1.1.5
+	github.com/mitchellh/mapstructure v1.5.0
+	github.com/stretchr/testify v1.9.0
+)
+
+require (
+	github.com/Masterminds/goutils v1.1.1 // indirect
+	github.com/Masterminds/semver/v3 v3.2.1 // indirect
+	github.com/Masterminds/sprig/v3 v3.2.3 // indirect
+	github.com/armon/go-metrics v0.4.1 // indirect
+	github.com/armon/go-radix v1.0.0 // indirect
+	github.com/aws/aws-sdk-go-v2/credentials v1.17.10 // indirect
+	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.16.1 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.5 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.6.5 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/ini v1.8.0 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.11.2 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.11.7 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sso v1.20.4 // indirect
+	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.23.4 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sts v1.28.6 // indirect
+	github.com/aws/smithy-go v1.20.2 // indirect
+	github.com/bgentry/speakeasy v0.1.0 // indirect
+	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
+	github.com/fatih/color v1.16.0 // indirect
+	github.com/google/uuid v1.6.0 // indirect
+	github.com/hashicorp/errwrap v1.1.0 // indirect
+	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
+	github.com/hashicorp/go-immutable-radix v1.3.1 // indirect
+	github.com/hashicorp/go-multierror v1.1.1 // indirect
+	github.com/hashicorp/go-rootcerts v1.0.2 // indirect
+	github.com/hashicorp/golang-lru v1.0.2 // indirect
+	github.com/hashicorp/serf v0.10.1 // indirect
+	github.com/huandu/xstrings v1.4.0 // indirect
+	github.com/imdario/mergo v0.3.16 // indirect
+	github.com/mattn/go-colorable v0.1.13 // indirect
+	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/mitchellh/copystructure v1.2.0 // indirect
+	github.com/mitchellh/go-homedir v1.1.0 // indirect
+	github.com/mitchellh/reflectwalk v1.0.2 // indirect
+	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
+	github.com/posener/complete v1.2.3 // indirect
+	github.com/shopspring/decimal v1.3.1 // indirect
+	github.com/spf13/cast v1.6.0 // indirect
+	golang.org/x/crypto v0.21.0 // indirect
+	golang.org/x/exp v0.0.0-20240325151524-a685a6edb6d8 // indirect
+	golang.org/x/sys v0.18.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

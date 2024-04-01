@@ -6,13 +6,13 @@ package catalog
 import (
 	"time"
 
-	sd "github.com/aws/aws-sdk-go-v2/service/servicediscovery"
+	awssd "github.com/aws/aws-sdk-go-v2/service/servicediscovery"
 	"github.com/hashicorp/consul/api"
 	"github.com/hashicorp/go-hclog"
 )
 
 // Sync aws->consul and vice versa.
-func Sync(toAWS, toConsul bool, namespaceID, consulPrefix, awsPrefix, awsPullInterval string, awsDNSTTL int64, stale bool, awsClient *sd.ServiceDiscovery, consulClient *api.Client, stop, stopped chan struct{}) {
+func Sync(toAWS, toConsul bool, namespaceID, consulPrefix, awsPrefix, awsPullInterval string, awsDNSTTL int64, stale bool, awsClient *awssd.Client, consulClient *api.Client, stop, stopped chan struct{}) {
 	defer close(stopped)
 	log := hclog.Default().Named("sync")
 	consul := consul{
@@ -29,9 +29,9 @@ func Sync(toAWS, toConsul bool, namespaceID, consulPrefix, awsPrefix, awsPullInt
 		log.Error("cannot parse aws pull interval", "error", err)
 		return
 	}
-	aws := aws{
+	aws := awsSyncer{
 		client:       awsClient,
-		log:          hclog.Default().Named("aws"),
+		log:          hclog.Default().Named("awsSyncer"),
 		trigger:      make(chan bool, 1),
 		consulPrefix: consulPrefix,
 		awsPrefix:    awsPrefix,
@@ -72,7 +72,7 @@ func Sync(toAWS, toConsul bool, namespaceID, consulPrefix, awsPrefix, awsPullInt
 		<-fetchAWSStopped
 		<-fetchConsulStopped
 	case <-fetchAWSStopped:
-		log.Info("problem wit aws fetch. shutting down...")
+		log.Info("problem wit awsSyncer fetch. shutting down...")
 		close(toConsulStop)
 		close(toAWSStop)
 		close(fetchConsulStop)
@@ -96,7 +96,7 @@ func Sync(toAWS, toConsul bool, namespaceID, consulPrefix, awsPrefix, awsPullInt
 		<-fetchAWSStopped
 		<-fetchConsulStopped
 	case <-toAWSStopped:
-		log.Info("problem with aws sync. shutting down...")
+		log.Info("problem with awsSyncer sync. shutting down...")
 		close(toConsulStop)
 		close(fetchConsulStop)
 		close(fetchAWSStop)

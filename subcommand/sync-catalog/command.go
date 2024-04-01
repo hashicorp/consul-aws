@@ -11,10 +11,12 @@ import (
 	"sync"
 
 	sd "github.com/aws/aws-sdk-go-v2/service/servicediscovery"
+	"github.com/mitchellh/cli"
+
+	"github.com/hashicorp/consul-aws/internal/flags"
+
 	"github.com/hashicorp/consul-aws/catalog"
 	"github.com/hashicorp/consul-aws/subcommand"
-	"github.com/hashicorp/consul/command/flags"
-	"github.com/mitchellh/cli"
 )
 
 const DefaultPollInterval = "30s"
@@ -90,7 +92,7 @@ func (c *Command) Run(args []string) int {
 		c.UI.Error(fmt.Sprintf("Error retrieving AWS session: %s", err))
 		return 1
 	}
-	awsClient := sd.New(config)
+	awsClient := sd.NewFromConfig(config)
 
 	consulClient, err := c.http.APIClient()
 	if err != nil {
