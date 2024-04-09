@@ -6,10 +6,11 @@ package main
 import (
 	"os"
 
+	"github.com/mitchellh/cli"
+
 	cmdSyncCatalog "github.com/hashicorp/consul-aws/subcommand/sync-catalog"
 	cmdVersion "github.com/hashicorp/consul-aws/subcommand/version"
 	"github.com/hashicorp/consul-aws/version"
-	"github.com/mitchellh/cli"
 )
 
 // Commands is the mapping of all available consul-aws commands.

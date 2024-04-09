@@ -4,15 +4,17 @@
 package catalog
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	x "github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/aws/awserr"
-	sd "github.com/aws/aws-sdk-go-v2/service/servicediscovery"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	awssd "github.com/aws/aws-sdk-go-v2/service/servicediscovery"
+	awssdtypes "github.com/aws/aws-sdk-go-v2/service/servicediscovery/types"
 	"github.com/hashicorp/go-hclog"
 )
 
@@ -30,9 +32,9 @@ type namespace struct {
 	isHTTP bool
 }
 
-type aws struct {
+type awsSyncer struct {
 	lock         sync.RWMutex
-	client       *sd.ServiceDiscovery
+	client       *awssd.Client
 	log          hclog.Logger
 	namespace    namespace
 	services     map[string]service
@@ -46,7 +48,7 @@ type aws struct {
 
 var awsServiceDescription = "Imported from Consul"
 
-func (a *aws) sync(consul *consul, stop, stopped chan struct{}) {
+func (a *awsSyncer) sync(consul *consul, stop, stopped chan struct{}) {
 	defer close(stopped)
 	for {
 		select {
@@ -71,32 +73,35 @@ func (a *aws) sync(consul *consul, stop, stopped chan struct{}) {
 	}
 }
 
-func (a *aws) fetchNamespace(id string) (*sd.Namespace, error) {
-	req := a.client.GetNamespaceRequest(&sd.GetNamespaceInput{Id: x.String(id)})
-	resp, err := req.Send()
+func (a *awsSyncer) fetchNamespace(id string) (*awssdtypes.Namespace, error) {
+	resp, err := a.client.GetNamespace(context.Background(), &awssd.GetNamespaceInput{Id: aws.String(id)})
 	if err != nil {
 		return nil, err
 	}
 	return resp.Namespace, nil
 }
 
-func (a *aws) fetchServices() ([]sd.ServiceSummary, error) {
-	req := a.client.ListServicesRequest(&sd.ListServicesInput{
-		Filters: []sd.ServiceFilter{{
-			Name:      sd.ServiceFilterNameNamespaceId,
-			Condition: sd.FilterConditionEq,
+func (a *awsSyncer) fetchServices() ([]awssdtypes.ServiceSummary, error) {
+	paginator := awssd.NewListServicesPaginator(a.client, &awssd.ListServicesInput{
+		Filters: []awssdtypes.ServiceFilter{{
+			Name:      awssdtypes.ServiceFilterNameNamespaceId,
+			Condition: awssdtypes.FilterConditionEq,
 			Values:    []string{a.namespace.id},
 		}},
 	})
-	p := req.Paginate()
-	services := []sd.ServiceSummary{}
-	for p.Next() {
-		services = append(services, p.CurrentPage().Services...)
+
+	services := []awssdtypes.ServiceSummary{}
+	for paginator.HasMorePages() {
+		p, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			return nil, fmt.Errorf("error paging through services: %s", err)
+		}
+		services = append(services, p.Services...)
 	}
-	return services, p.Err()
+	return services, nil
 }
 
-func (a *aws) transformServices(awsServices []sd.ServiceSummary) map[string]service {
+func (a *awsSyncer) transformServices(awsServices []awssdtypes.ServiceSummary) map[string]service {
 	services := map[string]service{}
 	for _, as := range awsServices {
 		s := service{
@@ -115,15 +120,15 @@ func (a *aws) transformServices(awsServices []sd.ServiceSummary) map[string]serv
 	return services
 }
 
-func (a *aws) transformNamespace(awsNamespace *sd.Namespace) namespace {
+func (a *awsSyncer) transformNamespace(awsNamespace *awssdtypes.Namespace) namespace {
 	namespace := namespace{id: *awsNamespace.Id, name: *awsNamespace.Name}
-	if awsNamespace.Type == sd.NamespaceTypeHttp {
+	if awsNamespace.Type == awssdtypes.NamespaceTypeHttp {
 		namespace.isHTTP = true
 	}
 	return namespace
 }
 
-func (a *aws) setupNamespace(id string) error {
+func (a *awsSyncer) setupNamespace(id string) error {
 	namespace, err := a.fetchNamespace(id)
 	if err != nil {
 		return err
@@ -132,14 +137,14 @@ func (a *aws) setupNamespace(id string) error {
 	return nil
 }
 
-func (a *aws) fetch() error {
+func (a *awsSyncer) fetch() error {
 	awsService, err := a.fetchServices()
 	if err != nil {
 		return err
 	}
 	services := a.transformServices(awsService)
 	for h, s := range services {
-		var awsNodes []sd.InstanceSummary
+		var awsNodes []awssdtypes.InstanceSummary
 		var err error
 		name := s.name
 		if s.fromConsul {
@@ -173,7 +178,7 @@ func (a *aws) fetch() error {
 	return nil
 }
 
-func (a *aws) getNodeForConsulID(name, id string) (node, bool) {
+func (a *awsSyncer) getNodeForConsulID(name, id string) (node, bool) {
 	a.lock.RLock()
 	copy, ok := a.services[name]
 	a.lock.RUnlock()
@@ -190,7 +195,7 @@ func (a *aws) getNodeForConsulID(name, id string) (node, bool) {
 	return node{}, false
 }
 
-func (a *aws) rekeyHealths(name string, healths map[string]health) map[string]health {
+func (a *awsSyncer) rekeyHealths(name string, healths map[string]health) map[string]health {
 	rekeyed := map[string]health{}
 	s, ok := a.getService(name)
 	if !ok {
@@ -204,57 +209,44 @@ func (a *aws) rekeyHealths(name string, healths map[string]health) map[string]he
 	return rekeyed
 }
 
-func statusFromAWS(aws sd.HealthStatus) health {
+func statusFromAWS(aws awssdtypes.HealthStatus) health {
 	var result health
 	switch aws {
-	case sd.HealthStatusHealthy:
+	case awssdtypes.HealthStatusHealthy:
 		result = passing
-	case sd.HealthStatusUnhealthy:
+	case awssdtypes.HealthStatusUnhealthy:
 		result = critical
-	case sd.HealthStatusUnknown:
+	case awssdtypes.HealthStatusUnknown:
 		result = unknown
 	}
 	return result
 }
 
-func statusToCustomHealth(h health) sd.CustomHealthStatus {
-	var result sd.CustomHealthStatus
-	switch h {
-	case passing:
-		result = sd.CustomHealthStatusHealthy
-	case critical:
-		result = sd.CustomHealthStatusUnhealthy
-	}
-	return result
-}
-
-func (a *aws) fetchHealths(id string) (map[string]health, error) {
-	req := a.client.GetInstancesHealthStatusRequest(&sd.GetInstancesHealthStatusInput{
+func (a *awsSyncer) fetchHealths(id string) (map[string]health, error) {
+	paginator := awssd.NewGetInstancesHealthStatusPaginator(a.client, &awssd.GetInstancesHealthStatusInput{
 		ServiceId: &id,
 	})
+
 	result := map[string]health{}
-	p := req.Paginate()
-	for p.Next() {
-		for id, health := range p.CurrentPage().Status {
+	for paginator.HasMorePages() {
+		p, err := paginator.NextPage(context.TODO())
+
+		if err != nil {
+			var notFound *awssdtypes.InstanceNotFound
+			if !errors.As(err, &notFound) {
+				return nil, fmt.Errorf("error paging through healths: %s", err)
+			}
+		}
+
+		for id, health := range p.Status {
 			result[id] = statusFromAWS(health)
 		}
 	}
-	err := p.Err()
-	if err != nil {
-		if err, ok := err.(awserr.Error); ok {
-			switch err.Code() {
-			case sd.ErrCodeInstanceNotFound:
-			default:
-				return result, err
-			}
-		} else {
-			return result, err
-		}
-	}
+
 	return result, nil
 }
 
-func (a *aws) transformNodes(awsNodes []sd.InstanceSummary) map[string]map[int]node {
+func (a *awsSyncer) transformNodes(awsNodes []awssdtypes.InstanceSummary) map[string]map[int]node {
 	nodes := map[string]map[int]node{}
 	for _, an := range awsNodes {
 		h := an.Attributes["AWS_INSTANCE_IPV4"]
@@ -272,56 +264,59 @@ func (a *aws) transformNodes(awsNodes []sd.InstanceSummary) map[string]map[int]n
 	return nodes
 }
 
-func (a *aws) fetchNodes(id string) ([]sd.InstanceSummary, error) {
-	req := a.client.ListInstancesRequest(&sd.ListInstancesInput{
+func (a *awsSyncer) fetchNodes(id string) ([]awssdtypes.InstanceSummary, error) {
+	paginator := awssd.NewListInstancesPaginator(a.client, &awssd.ListInstancesInput{
 		ServiceId: &id,
 	})
-	p := req.Paginate()
-	nodes := []sd.InstanceSummary{}
-	for p.Next() {
-		nodes = append(nodes, p.CurrentPage().Instances...)
-	}
-	return nodes, p.Err()
-}
 
-func (a *aws) discoverNodes(name string) ([]sd.InstanceSummary, error) {
-	req := a.client.DiscoverInstancesRequest(&sd.DiscoverInstancesInput{
-		HealthStatus:  sd.HealthStatusFilterHealthy,
-		NamespaceName: x.String(a.namespace.name),
-		ServiceName:   x.String(name),
-	})
-	resp, err := req.Send()
-	if err != nil {
-		return nil, err
-	}
-	nodes := []sd.InstanceSummary{}
-	for _, i := range resp.Instances {
-		nodes = append(nodes, sd.InstanceSummary{Id: i.InstanceId, Attributes: i.Attributes})
+	nodes := []awssdtypes.InstanceSummary{}
+	for paginator.HasMorePages() {
+		p, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			return nil, fmt.Errorf("error paging through instances: %s", err)
+		}
+		nodes = append(nodes, p.Instances...)
 	}
 	return nodes, nil
 }
 
-func (a *aws) getServices() map[string]service {
+func (a *awsSyncer) discoverNodes(name string) ([]awssdtypes.InstanceSummary, error) {
+	resp, err := a.client.DiscoverInstances(context.TODO(), &awssd.DiscoverInstancesInput{
+		HealthStatus:  awssdtypes.HealthStatusFilterHealthy,
+		NamespaceName: aws.String(a.namespace.name),
+		ServiceName:   aws.String(name),
+	})
+	if err != nil {
+		return nil, err
+	}
+	nodes := []awssdtypes.InstanceSummary{}
+	for _, i := range resp.Instances {
+		nodes = append(nodes, awssdtypes.InstanceSummary{Id: i.InstanceId, Attributes: i.Attributes})
+	}
+	return nodes, nil
+}
+
+func (a *awsSyncer) getServices() map[string]service {
 	a.lock.RLock()
 	copy := a.services
 	a.lock.RUnlock()
 	return copy
 }
 
-func (a *aws) getService(name string) (service, bool) {
+func (a *awsSyncer) getService(name string) (service, bool) {
 	a.lock.RLock()
 	copy, ok := a.services[name]
 	a.lock.RUnlock()
 	return copy, ok
 }
 
-func (a *aws) setServices(services map[string]service) {
+func (a *awsSyncer) setServices(services map[string]service) {
 	a.lock.Lock()
 	a.services = services
 	a.lock.Unlock()
 }
 
-func (a *aws) create(services map[string]service) int {
+func (a *awsSyncer) create(services map[string]service) int {
 	wg := sync.WaitGroup{}
 	count := 0
 	for k, s := range services {
@@ -330,26 +325,23 @@ func (a *aws) create(services map[string]service) int {
 		}
 		name := a.consulPrefix + k
 		if len(s.awsID) == 0 {
-			input := sd.CreateServiceInput{
+			input := awssd.CreateServiceInput{
 				Description: &awsServiceDescription,
 				Name:        &name,
 				NamespaceId: &a.namespace.id,
 			}
 			if !a.namespace.isHTTP {
-				input.DnsConfig = &sd.DnsConfig{
-					DnsRecords: []sd.DnsRecord{
-						{TTL: &a.dnsTTL, Type: sd.RecordTypeSrv},
+				input.DnsConfig = &awssdtypes.DnsConfig{
+					DnsRecords: []awssdtypes.DnsRecord{
+						{TTL: &a.dnsTTL, Type: awssdtypes.RecordTypeSrv},
 					},
 				}
 			}
-			req := a.client.CreateServiceRequest(&input)
-			resp, err := req.Send()
+			resp, err := a.client.CreateService(context.TODO(), &input)
 			if err != nil {
-				if err, ok := err.(awserr.Error); ok {
-					switch err.Code() {
-					case sd.ErrCodeServiceAlreadyExists:
-						a.log.Info("service already exists", "name", name)
-					}
+				var alreadyExists *awssdtypes.ServiceAlreadyExists
+				if !errors.As(err, &alreadyExists) {
+					a.log.Info("service already exists", "name", name)
 				} else {
 					a.log.Error("cannot create services in AWS", "error", err.Error())
 				}
@@ -367,12 +359,11 @@ func (a *aws) create(services map[string]service) int {
 					attributes := n.attributes
 					attributes["AWS_INSTANCE_IPV4"] = h
 					attributes["AWS_INSTANCE_PORT"] = fmt.Sprintf("%d", n.port)
-					req := a.client.RegisterInstanceRequest(&sd.RegisterInstanceInput{
+					_, err := a.client.RegisterInstance(context.TODO(), &awssd.RegisterInstanceInput{
 						ServiceId:  &serviceID,
 						Attributes: attributes,
 						InstanceId: &instanceID,
 					})
-					_, err := req.Send()
 					if err != nil {
 						a.log.Error("cannot create nodes", "error", err.Error())
 					}
@@ -383,7 +374,7 @@ func (a *aws) create(services map[string]service) int {
 		// 	wg.Add(1)
 		// 	go func(serviceID, instanceID string, h health) {
 		// 		defer wg.Done()
-		// 		req := a.client.UpdateInstanceCustomHealthStatusRequest(&sd.UpdateInstanceCustomHealthStatusInput{
+		// 		req := a.client.UpdateInstanceCustomHealthStatusRequest(&awssd.UpdateInstanceCustomHealthStatusInput{
 		// 			ServiceId:  &serviceID,
 		// 			InstanceId: &instanceID,
 		// 			Status:     statusToCustomHealth(h),
@@ -399,7 +390,7 @@ func (a *aws) create(services map[string]service) int {
 	return count
 }
 
-func (a *aws) remove(services map[string]service) int {
+func (a *awsSyncer) remove(services map[string]service) int {
 	wg := sync.WaitGroup{}
 	for _, s := range services {
 		if !s.fromConsul || len(s.awsID) == 0 {
@@ -410,11 +401,10 @@ func (a *aws) remove(services map[string]service) int {
 				wg.Add(1)
 				go func(serviceID, id string) {
 					defer wg.Done()
-					req := a.client.DeregisterInstanceRequest(&sd.DeregisterInstanceInput{
+					_, err := a.client.DeregisterInstance(context.TODO(), &awssd.DeregisterInstanceInput{
 						ServiceId:  &serviceID,
 						InstanceId: &id,
 					})
-					_, err := req.Send()
 					if err != nil {
 						a.log.Error("cannot remove instance", "error", err.Error())
 					}
@@ -433,10 +423,9 @@ func (a *aws) remove(services map[string]service) int {
 		if len(s.nodes) < len(origService.nodes) {
 			continue
 		}
-		req := a.client.DeleteServiceRequest(&sd.DeleteServiceInput{
+		_, err := a.client.DeleteService(context.TODO(), &awssd.DeleteServiceInput{
 			Id: &s.awsID,
 		})
-		_, err := req.Send()
 		if err != nil {
 			a.log.Error("cannot remove services", "name", k, "id", s.awsID, "error", err.Error())
 		} else {
@@ -446,7 +435,7 @@ func (a *aws) remove(services map[string]service) int {
 	return count
 }
 
-func (a *aws) fetchIndefinetely(stop, stopped chan struct{}) {
+func (a *awsSyncer) fetchIndefinetely(stop, stopped chan struct{}) {
 	defer close(stopped)
 	for {
 		err := a.fetch()

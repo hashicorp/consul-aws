@@ -110,7 +110,7 @@ func (c *consul) setNode(k, h string, p int, n node) {
 	c.lock.Unlock()
 }
 
-func (c *consul) sync(aws *aws, stop, stopped chan struct{}) {
+func (c *consul) sync(aws *awsSyncer, stop, stopped chan struct{}) {
 	defer close(stopped)
 	for {
 		select {

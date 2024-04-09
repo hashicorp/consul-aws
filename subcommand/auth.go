@@ -4,10 +4,12 @@
 package subcommand
 
 import (
+	"context"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/aws/external"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 )
 
 func AWSConfig() (aws.Config, error) {
-	return external.LoadDefaultAWSConfig()
+	return awsconfig.LoadDefaultConfig(context.TODO())
 }

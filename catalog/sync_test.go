@@ -4,15 +4,19 @@
 package catalog
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"testing"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws/external"
-	sd "github.com/aws/aws-sdk-go-v2/service/servicediscovery"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	awssd "github.com/aws/aws-sdk-go-v2/service/servicediscovery"
+	awssdtypes "github.com/aws/aws-sdk-go-v2/service/servicediscovery/types"
+
 	"github.com/hashicorp/consul/api"
-	"github.com/hashicorp/consul/command/flags"
+
+	"github.com/hashicorp/consul-aws/internal/flags"
 )
 
 func TestSync(t *testing.T) {
@@ -27,11 +31,11 @@ func TestSync(t *testing.T) {
 }
 
 func runSyncTest(t *testing.T, namespaceID string) {
-	config, err := external.LoadDefaultAWSConfig()
+	config, err := awsconfig.LoadDefaultConfig(context.TODO())
 	if err != nil {
 		t.Fatalf("Error retrieving AWS session: %s", err)
 	}
-	a := sd.New(config)
+	a := awssd.NewFromConfig(config)
 
 	f := flags.HTTPFlags{}
 	c, err := f.APIClient()
@@ -101,13 +105,16 @@ func runSyncTest(t *testing.T, namespaceID string) {
 
 	err = deleteInstanceInAWS(a, aID)
 	if err != nil {
-		t.Logf("error deregistering instance: %s", err)
+		t.Logf("error deregistering instance in AWS: %s", err)
 	}
 	err = deleteServiceInAWS(a, aID)
 	if err != nil {
-		t.Logf("error deleting service: %s", err)
+		t.Logf("error deleting service in AWS: %s", err)
 	}
-	deleteServiceInConsul(c, cID)
+	err = deleteServiceInConsul(c, cID)
+	if err != nil {
+		t.Logf("error deleting service in Consul: %s", err)
+	}
 
 	select {
 	case <-time.After((WaitTime * 3) * time.Second):
@@ -141,32 +148,32 @@ func createServiceInConsul(c *api.Client, id, name string) error {
 	return err
 }
 
-func deleteServiceInConsul(c *api.Client, id string) {
-	c.Catalog().Deregister(&api.CatalogDeregistration{Node: ConsulAWSNodeName, ServiceID: id}, nil)
+func deleteServiceInConsul(c *api.Client, id string) error {
+	_, err := c.Catalog().Deregister(&api.CatalogDeregistration{Node: ConsulAWSNodeName, ServiceID: id}, nil)
+	return err
 }
 
-func createServiceInAWS(a *sd.ServiceDiscovery, namespaceID, name string) (string, error) {
+func createServiceInAWS(a *awssd.Client, namespaceID, name string) (string, error) {
 	ttl := int64(60)
-	input := sd.CreateServiceInput{
+	input := awssd.CreateServiceInput{
 		Name:        &name,
 		NamespaceId: &namespaceID,
-		DnsConfig: &sd.DnsConfig{
-			DnsRecords: []sd.DnsRecord{
-				{TTL: &ttl, Type: sd.RecordTypeSrv},
+		DnsConfig: &awssdtypes.DnsConfig{
+			DnsRecords: []awssdtypes.DnsRecord{
+				{TTL: &ttl, Type: awssdtypes.RecordTypeSrv},
 			},
-			RoutingPolicy: sd.RoutingPolicyMultivalue,
+			RoutingPolicy: awssdtypes.RoutingPolicyMultivalue,
 		},
 	}
-	req := a.CreateServiceRequest(&input)
-	resp, err := req.Send()
+	resp, err := a.CreateService(context.TODO(), &input)
 	if err != nil {
 		return "", err
 	}
 	return *resp.Service.Id, nil
 }
 
-func createInstanceInAWS(a *sd.ServiceDiscovery, serviceID string) error {
-	req := a.RegisterInstanceRequest(&sd.RegisterInstanceInput{
+func createInstanceInAWS(a *awssd.Client, serviceID string) error {
+	_, err := a.RegisterInstance(context.TODO(), &awssd.RegisterInstanceInput{
 		ServiceId:  &serviceID,
 		InstanceId: &serviceID,
 		Attributes: map[string]string{
@@ -175,21 +182,18 @@ func createInstanceInAWS(a *sd.ServiceDiscovery, serviceID string) error {
 			"FUBAR":             "BARFU",
 		},
 	})
-	_, err := req.Send()
 	return err
 }
 
-func deleteInstanceInAWS(a *sd.ServiceDiscovery, id string) error {
-	req := a.DeregisterInstanceRequest(&sd.DeregisterInstanceInput{ServiceId: &id, InstanceId: &id})
-	_, err := req.Send()
+func deleteInstanceInAWS(a *awssd.Client, id string) error {
+	_, err := a.DeregisterInstance(context.TODO(), &awssd.DeregisterInstanceInput{ServiceId: &id, InstanceId: &id})
 	return err
 }
 
-func deleteServiceInAWS(a *sd.ServiceDiscovery, id string) error {
+func deleteServiceInAWS(a *awssd.Client, id string) error {
 	var err error
 	for i := 0; i < 50; i++ {
-		req := a.DeleteServiceRequest(&sd.DeleteServiceInput{Id: &id})
-		_, err = req.Send()
+		_, err = a.DeleteService(context.TODO(), &awssd.DeleteServiceInput{Id: &id})
 		if err != nil {
 			time.Sleep(100 * time.Millisecond)
 		} else {
@@ -241,28 +245,34 @@ func checkForImportedAWSService(c *api.Client, name, namespaceID, serviceID stri
 	return fmt.Errorf("shrug")
 }
 
-func checkForImportedConsulService(a *sd.ServiceDiscovery, namespaceID, name string, repeat int) error {
+func checkForImportedConsulService(a *awssd.Client, namespaceID, name string, repeat int) error {
 	for i := 0; i < repeat; i++ {
-		req := a.ListServicesRequest(&sd.ListServicesInput{
-			Filters: []sd.ServiceFilter{{
-				Name:      sd.ServiceFilterNameNamespaceId,
-				Condition: sd.FilterConditionEq,
-				Values:    []string{namespaceID},
-			}},
+		paginator := awssd.NewListServicesPaginator(a, &awssd.ListServicesInput{
+			Filters: []awssdtypes.ServiceFilter{
+				{
+					Name:      awssdtypes.ServiceFilterNameNamespaceId,
+					Condition: awssdtypes.FilterConditionEq,
+					Values:    []string{namespaceID},
+				},
+			},
 		})
-		p := req.Paginate()
-		for p.Next() {
-			for _, s := range p.CurrentPage().Services {
+
+		for paginator.HasMorePages() {
+			p, err := paginator.NextPage(context.TODO())
+			if err != nil {
+				return fmt.Errorf("error paging through services: %s", err)
+			}
+
+			for _, s := range p.Services {
 				if *s.Name == name {
 					if !(s.Description != nil || *s.Description == awsServiceDescription) {
 						return fmt.Errorf("consul description is missing on aws service")
 					}
-					var instance *sd.InstanceSummary
+					var instance *awssdtypes.InstanceSummary
 					for i := 0; i < 20; i++ {
-						ireq := a.ListInstancesRequest(&sd.ListInstancesInput{
+						out, err := a.ListInstances(context.TODO(), &awssd.ListInstancesInput{
 							ServiceId: s.Id,
 						})
-						out, err := ireq.Send()
 						if err != nil {
 							continue
 						}

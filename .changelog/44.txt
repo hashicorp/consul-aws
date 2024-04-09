@@ -1,0 +1,4 @@
+```release-note:security
+Update dependencies to fix security vulnerabilities.
+Due to the large number of dependencies, the list of CVEs is not included in this release note.
+```

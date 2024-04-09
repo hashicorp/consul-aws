@@ -7,8 +7,9 @@ import (
 	"log"
 	"os"
 
-	"github.com/hashicorp/consul-aws/version"
 	"github.com/mitchellh/cli"
+
+	"github.com/hashicorp/consul-aws/version"
 )
 
 func main() {
