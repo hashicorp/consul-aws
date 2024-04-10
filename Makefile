@@ -1,14 +1,12 @@
-SHELL = bash
+SHELL := /usr/bin/env bash -euo pipefail -c
 
-GOOS?=$(shell go env GOOS)
-GOARCH?=$(shell go env GOARCH)
-GOPATH=$(shell go env GOPATH)
-GOTAGS ?=
-GOTOOLS = \
-	github.com/magiconair/vendorfmt/cmd/vendorfmt \
-	github.com/mitchellh/gox \
-	golang.org/x/tools/cmd/cover \
-	golang.org/x/tools/cmd/stringer
+PRODUCT_NAME ?= consul-aws
+BIN_NAME     ?= $(PRODUCT_NAME)
+GOPATH       ?= $(shell go env GOPATH)
+GOBIN        ?= $(GOPATH)/bin
+
+VERSION = $(shell head -n 1 version/VERSION)
+GOLANG_VERSION ?= $(shell head -n 1 .go-version)
 
 DEV_IMAGE?=consul-aws-dev
 GO_BUILD_TAG?=consul-aws-build-go
@@ -16,104 +14,74 @@ GIT_COMMIT?=$(shell git rev-parse --short HEAD)
 GIT_DIRTY?=$(shell test -n "`git status --porcelain`" && echo "+CHANGES" || true)
 GIT_DESCRIBE?=$(shell git describe --tags --always)
 GIT_IMPORT=github.com/hashicorp/consul-aws/version
-GOLDFLAGS=-X $(GIT_IMPORT).GitCommit=$(GIT_COMMIT)$(GIT_DIRTY) -X $(GIT_IMPORT).GitDescribe=$(GIT_DESCRIBE)
+GOLDFLAGS=-X $(GIT_IMPORT).GitCommit=$(GIT_COMMIT)$(GIT_DIRTY)
+
+# Get local ARCH; on Intel Mac, 'uname -m' returns x86_64 which we turn into amd64.
+# Not using 'go env GOOS/GOARCH' here so 'make docker' will work without local Go install.
+ARCH     ?= $(shell A=$$(uname -m); [ $$A = x86_64 ] && A=amd64; echo $$A)
+OS       ?= $(shell go env GOOS)
+PLATFORM = $(OS)/$(ARCH)
+DIST     = dist/$(PLATFORM)
+BIN      = $(DIST)/$(BIN_NAME)
+
+# Docker Stuff.
+export DOCKER_BUILDKIT=1
+BUILD_ARGS = BIN_NAME=$(BIN_NAME) PRODUCT_VERSION=$(VERSION) PRODUCT_REVISION=$(REVISION)
+TAG        = $(PRODUCT_NAME):$(VERSION)
+BA_FLAGS   = $(addprefix --build-arg=,$(BUILD_ARGS))
+FLAGS      = --target $(TARGET) --platform linux/$(ARCH) --tag $(TAG) $(BA_FLAGS)
 
 HTTP_FLAGS_PACKAGE_DIR=internal/flags
 
-# Docker Image publishing variables
-DOCKER_IMAGE_NAME=consul-aws
-DOCKER_ORG=hashicorp
-export DOCKER_IMAGE_NAME
-export DOCKER_ORG
+dist: ## make dist directory and ignore everything
+	mkdir -p $(DIST)
+	echo '*' > dist/.gitignore
 
-export GIT_COMMIT
-export GIT_DIRTY
-export GIT_DESCRIBE
-export GOLDFLAGS
-export GOTAGS
+.PHONY: bin
+bin: dist ## Build the binary
+	GOARCH=$(ARCH) GOOS=$(OS) CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags="$(GOLDFLAGS)" -o $(BIN) .
 
-DIST_TAG?=1
-DIST_BUILD?=1
-DIST_SIGN?=1
+linux:  ## Linux builds a linux binary compatible with the source platform
+	@mkdir -p ./dist/linux/$(ARCH)/$(BIN_NAME)
+	CGO_ENABLED=0 GOOS=linux GOARCH=$(ARCH) go build -o ./dist/linux/$(ARCH)/$(BIN_NAME) -ldflags "$(GOLDFLAGS)" -tags "$(GOTAGS)"
 
-ifdef DIST_VERSION
-DIST_VERSION_ARG=-v "$(DIST_VERSION)"
-else
-DIST_VERSION_ARG=
-endif
+.PHONY: dev
+dev: bin ## Build binary and copy to the destination
+	cp $(BIN) $(GOBIN)/$(BIN_NAME)
 
-ifdef DIST_RELEASE_DATE
-DIST_DATE_ARG=-d "$(DIST_RELEASE_DATE)"
-else
-DIST_DATE_ARG=
-endif
+# build is used for the CRT build.yml workflow.
+# Environment variables are populated by hashicorp/actions-go-build, not the makefile.
+# https://github.com/hashicorp/actions-go-build
+.PHONY: build
+build:
+	CGO_ENABLED=0 go build \
+		-a \
+		-o="${BIN_PATH}" \
+		-ldflags " \
+			-X 'github.com/hashicorp/http-echo/version.GitCommit=${PRODUCT_REVISION}' \
+		" \
+		-tags "${GOTAGS}" \
+		-trimpath \
+		-buildvcs=false
 
-ifdef DIST_PRERELEASE
-DIST_REL_ARG=-r "$(DIST_PRERELEASE)"
-else
-DIST_REL_ARG=
-endif
+.PHONY: docker
+docker: linux ## build the release-target docker image
+	$(eval TARGET := release-default) # there are many targets in the Dockerfile, add more build if you need to customize the target
+	docker build $(FLAGS) .
+	@echo 'Image built; run "docker run --rm $(TAG)" to try it out.'
 
-PUB_GIT?=1
-PUB_WEBSITE?=1
+docker-run: docker ## run the image of $(TAG)
+	docker run --rm $(TAG)
 
-ifeq ($(PUB_GIT),1)
-PUB_GIT_ARG=-g
-else
-PUB_GIT_ARG=
-endif
-
-ifeq ($(PUB_WEBSITE),1)
-PUB_WEBSITE_ARG=-w
-else
-PUB_WEBSITE_ARG=
-endif
-
-DEV_PUSH?=0
-ifeq ($(DEV_PUSH),1)
-DEV_PUSH_ARG=
-else
-DEV_PUSH_ARG=--no-push
-endif
-
-all: bin
-
-bin:
-	@$(SHELL) $(CURDIR)/build-support/scripts/build-local.sh
-
-dev:
-	@$(SHELL) $(CURDIR)/build-support/scripts/build-local.sh -o $(GOOS) -a $(GOARCH)
-
-dev-docker:
-	@docker build -t '$(DEV_IMAGE)' --build-arg 'GIT_COMMIT=$(GIT_COMMIT)' --build-arg 'GIT_DIRTY=$(GIT_DIRTY)' --build-arg 'GIT_DESCRIBE=$(GIT_DESCRIBE)' -f $(CURDIR)/build-support/docker/Dev.dockerfile $(CURDIR)
-
-dev-tree:
-	@$(SHELL) $(CURDIR)/build-support/scripts/dev.sh $(DEV_PUSH_ARG)
+.PHONY: dev-docker
+dev-docker: docker ## build docker image and tag the image to local
+	docker tag '$(PRODUCT_NAME):$(VERSION)'  '$(PRODUCT_NAME):local'
 
 test:
 	go test ./...
 
 tools:
 	go get -u -v $(GOTOOLS)
-
-# dist builds binaries for all platforms and packages them for distribution
-# make dist DIST_VERSION=<Desired Version> DIST_RELEASE_DATE=<release date>
-# date is in "month day, year" format.
-dist:
-	@$(SHELL) $(CURDIR)/build-support/scripts/release.sh -t '$(DIST_TAG)' -b '$(DIST_BUILD)' -S '$(DIST_SIGN)' $(DIST_VERSION_ARG) $(DIST_DATE_ARG) $(DIST_REL_ARG)
-
-publish:
-	@$(SHELL) $(CURDIR)/build-support/scripts/publish.sh $(PUB_GIT_ARG) $(PUB_WEBSITE_ARG)
-
-docker-images: go-build-image
-
-go-build-image:
-	@echo "Building Golang build container"
-	@docker build $(NOCACHE) $(QUIET) --build-arg 'GOTOOLS=$(GOTOOLS)' -t $(GO_BUILD_TAG) - < build-support/docker/Build-Go.dockerfile
-
-docker-publish:
-	@echo "Building Docker Image"
-	@$(SHELL) $(CURDIR)/build-support/scripts/publish-docker.sh
 
 clean:
 	@rm -rf \
