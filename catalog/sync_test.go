@@ -19,44 +19,47 @@ import (
 	"github.com/hashicorp/consul-aws/internal/flags"
 )
 
+// TestSync is an integration test that creates a service in Consul and AWS.
+// Documentation on setup can be found in the engineering docs for `consul-aws`.
 func TestSync(t *testing.T) {
 	if len(os.Getenv("INTTEST")) == 0 {
 		t.Skip("Set INTTEST=1 to enable integration tests")
 	}
 	namespaceID := os.Getenv("NAMESPACEID")
-	if len(namespaceID) == 0 {
-		namespaceID = "ns-n5qqli2346hqood4"
+	if namespaceID == "" {
+		t.Fatalf("The NAMESPACEID varaible must be set.")
 	}
 	runSyncTest(t, namespaceID)
 }
 
 func runSyncTest(t *testing.T, namespaceID string) {
+	// Test Setup
 	config, err := awsconfig.LoadDefaultConfig(context.TODO())
 	if err != nil {
 		t.Fatalf("Error retrieving AWS session: %s", err)
 	}
-	a := awssd.NewFromConfig(config)
+	awssdClient := awssd.NewFromConfig(config)
 
 	f := flags.HTTPFlags{}
-	c, err := f.APIClient()
+	consulClient, err := f.APIClient()
 	if err != nil {
 		t.Fatalf("Error connecting to Consul agent: %s", err)
 	}
 
-	cID := "r1"
-	cName := "redis"
-	aName := "web"
+	consulServiceID := "r1"
+	consulServiceName := "redis"
+	awsServiceName := "web"
 
-	err = createServiceInConsul(c, cID, cName)
+	err = createServiceInConsul(consulClient, consulServiceID, consulServiceName)
 	if err != nil {
 		t.Fatalf("error creating service in Consul: %s", err)
 	}
 
-	aID, err := createServiceInAWS(a, namespaceID, aName)
+	awsServiceID, err := createServiceInAWS(awssdClient, namespaceID, awsServiceName)
 	if err != nil {
-		t.Fatalf("error creating service %s in aws: %s", aName, err)
+		t.Fatalf("error creating service %s in aws: %s", awsServiceName, err)
 	}
-	err = createInstanceInAWS(a, aID)
+	err = createInstanceInAWS(awssdClient, awsServiceID)
 	if err != nil {
 		t.Fatalf("error creating instance in aws: %s", err)
 	}
@@ -66,28 +69,27 @@ func runSyncTest(t *testing.T, namespaceID string) {
 	go Sync(
 		true, true, namespaceID,
 		"consul_", "aws_",
-		"0", 0, true,
-		a, c,
+		"1s", 0, true,
+		awssdClient, consulClient,
 		stop, stopped,
 	)
 
 	doneC := make(chan struct{})
 	doneA := make(chan struct{})
 	go func() {
-		if err := checkForImportedAWSService(c, "aws_"+aName, namespaceID, aID, 100); err != nil {
+		if err := checkForImportedAWSService(consulClient, "aws_"+awsServiceName, namespaceID, awsServiceID, 100); err != nil {
 			t.Error(err)
 		} else {
 			close(doneA)
 		}
 	}()
 	go func() {
-		if err := checkForImportedConsulService(a, namespaceID, "consul_"+cName, 100); err != nil {
+		if err := checkForImportedConsulService(awssdClient, namespaceID, "consul_"+consulServiceName, 100); err != nil {
 			t.Error(err)
 		} else {
 			close(doneC)
 		}
 	}()
-
 	select {
 	case <-time.After(20 * time.Second):
 	}
@@ -103,26 +105,26 @@ func runSyncTest(t *testing.T, namespaceID string) {
 		t.Error("service was not imported in aws")
 	}
 
-	err = deleteInstanceInAWS(a, aID)
+	err = deleteInstanceInAWS(awssdClient, awsServiceID)
 	if err != nil {
 		t.Logf("error deregistering instance in AWS: %s", err)
 	}
-	err = deleteServiceInAWS(a, aID)
+	err = deleteServiceInAWS(awssdClient, awsServiceID)
 	if err != nil {
 		t.Logf("error deleting service in AWS: %s", err)
 	}
-	err = deleteServiceInConsul(c, cID)
+	err = deleteServiceInConsul(consulClient, consulServiceID)
 	if err != nil {
 		t.Logf("error deleting service in Consul: %s", err)
 	}
 
 	select {
-	case <-time.After((WaitTime * 3) * time.Second):
+	case <-time.After((WaitTime * 5) * time.Second):
 	}
-	if err = checkForImportedAWSService(c, "aws_"+aName, namespaceID, aID, 1); err == nil {
+	if err = checkForImportedAWSService(consulClient, "aws_"+awsServiceName, namespaceID, awsServiceID, 1); err == nil {
 		t.Error("Expected that the imported aws services is deleted")
 	}
-	if err = checkForImportedConsulService(a, namespaceID, "consul_"+cName, 1); err == nil {
+	if err = checkForImportedConsulService(awssdClient, namespaceID, "consul_"+consulServiceName, 1); err == nil {
 		t.Error("Expected that the imported consul services is deleted")
 	}
 
@@ -164,6 +166,7 @@ func createServiceInAWS(a *awssd.Client, namespaceID, name string) (string, erro
 			},
 			RoutingPolicy: awssdtypes.RoutingPolicyMultivalue,
 		},
+		HealthCheckCustomConfig: &awssdtypes.HealthCheckCustomConfig{},
 	}
 	resp, err := a.CreateService(context.TODO(), &input)
 	if err != nil {
@@ -182,6 +185,16 @@ func createInstanceInAWS(a *awssd.Client, serviceID string) error {
 			"FUBAR":             "BARFU",
 		},
 	})
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//time.Sleep(30 * time.Second) // This is a hack to wait for the instance to be created
+	//_, err = a.UpdateInstanceCustomHealthStatus(context.TODO(), &awssd.UpdateInstanceCustomHealthStatusInput{
+	//	InstanceId: &serviceID,
+	//	ServiceId:  &serviceID,
+	//	Status:     awssdtypes.CustomHealthStatusHealthy,
+	//})
 	return err
 }
 
