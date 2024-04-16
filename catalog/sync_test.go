@@ -27,7 +27,7 @@ func TestSync(t *testing.T) {
 	}
 	namespaceID := os.Getenv("NAMESPACEID")
 	if namespaceID == "" {
-		t.Fatalf("The NAMESPACEID varaible must be set.")
+		t.Fatalf("The NAMESPACEID variable must be set.")
 	}
 	runSyncTest(t, namespaceID)
 }
