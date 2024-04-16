@@ -16,9 +16,13 @@ To compile from source, please see the instructions in the [contributing section
 
 ## Usage
 
-`consul-aws` can sync from Consul to AWS CloudMap (`-to-aws`), from AWS CloudMap to Consul (`-to-consul`) and both at the same time. No matter which direction is being used `consul-aws` needs to be connected to Consul and AWS CloudMap.
+`consul-aws` can sync from Consul to AWS CloudMap (`-to-aws`), from AWS CloudMap to Consul (`-to-consul`) and both at the same time. 
+No matter which direction is being used `consul-aws` needs to be connected to Consul and AWS CloudMap.
 
-In order to help with connecting to a Consul cluster, `consul-aws` provides all the flags you might need including the possibility to set an ACL token. `consul-aws` loads your AWS configuration from `.aws`, from the instance profile and ENV variables - it supports everything provided by the AWS golang sdk.
+In order to help with connecting to a Consul cluster, `consul-aws` provides all the flags you might need including the possibility to set an ACL token. 
+`consul-aws` loads your AWS configuration from `.aws`, from the instance profile and ENV variables - it supports everything provided by the AWS golang sdk.
+A default AWS region is not assumed.
+You can specify this with the standard AWS environment variables or as part of your static credentials.
 
 Apart from that a AWS CloudMap namespace id has to be provided. This is how `consul-aws` could be invoked to sync both directions:
 
@@ -75,6 +79,7 @@ go test ./... -run SomeTestFunction_name
 ```
 
 **Note:** To run the sync integration tests, you must specify `INTTEST=1` in your environment and [AWS credentials](https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html#specifying-credentials).
+You must also have a Consul server running locally.
 
 ## Compatibility with Consul
 

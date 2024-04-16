@@ -26,17 +26,11 @@ const (
 	ConsulAWSID     = "external-aws-id"
 )
 
-type namespace struct {
-	id     string
-	name   string
-	isHTTP bool
-}
-
 type awsSyncer struct {
 	lock         sync.RWMutex
 	client       *awssd.Client
 	log          hclog.Logger
-	namespace    namespace
+	namespace    *awssdtypes.Namespace
 	services     map[string]service
 	trigger      chan bool
 	consulPrefix string
@@ -86,7 +80,7 @@ func (a *awsSyncer) fetchServices() ([]awssdtypes.ServiceSummary, error) {
 		Filters: []awssdtypes.ServiceFilter{{
 			Name:      awssdtypes.ServiceFilterNameNamespaceId,
 			Condition: awssdtypes.FilterConditionEq,
-			Values:    []string{a.namespace.id},
+			Values:    []string{*a.namespace.Id},
 		}},
 	})
 
@@ -108,7 +102,7 @@ func (a *awsSyncer) transformServices(awsServices []awssdtypes.ServiceSummary) m
 			id:           *as.Id,
 			name:         *as.Name,
 			awsID:        *as.Id,
-			awsNamespace: a.namespace.id,
+			awsNamespace: *a.namespace.Id,
 		}
 		if as.Description != nil && *as.Description == awsServiceDescription {
 			s.fromConsul = true
@@ -120,20 +114,12 @@ func (a *awsSyncer) transformServices(awsServices []awssdtypes.ServiceSummary) m
 	return services
 }
 
-func (a *awsSyncer) transformNamespace(awsNamespace *awssdtypes.Namespace) namespace {
-	namespace := namespace{id: *awsNamespace.Id, name: *awsNamespace.Name}
-	if awsNamespace.Type == awssdtypes.NamespaceTypeHttp {
-		namespace.isHTTP = true
-	}
-	return namespace
-}
-
 func (a *awsSyncer) setupNamespace(id string) error {
 	namespace, err := a.fetchNamespace(id)
 	if err != nil {
 		return err
 	}
-	a.namespace = a.transformNamespace(namespace)
+	a.namespace = namespace
 	return nil
 }
 
@@ -231,11 +217,15 @@ func (a *awsSyncer) fetchHealths(id string) (map[string]health, error) {
 	for paginator.HasMorePages() {
 		p, err := paginator.NextPage(context.TODO())
 
+		var notFound *awssdtypes.InstanceNotFound
+		if errors.As(err, &notFound) {
+			// Note (dans): I think this is the case when all the instances have an unknown health status for a service,
+			// which is fairly common because we don't sync the health status from Consul to AWS (yet).
+			a.log.Trace("instance not found", "service-id", id)
+			return result, nil
+		}
 		if err != nil {
-			var notFound *awssdtypes.InstanceNotFound
-			if !errors.As(err, &notFound) {
-				return nil, fmt.Errorf("error paging through healths: %s", err)
-			}
+			return nil, fmt.Errorf("error paging through healths: %s", err)
 		}
 
 		for id, health := range p.Status {
@@ -281,9 +271,17 @@ func (a *awsSyncer) fetchNodes(id string) ([]awssdtypes.InstanceSummary, error) 
 }
 
 func (a *awsSyncer) discoverNodes(name string) ([]awssdtypes.InstanceSummary, error) {
+	if a.namespace.Properties == nil ||
+		a.namespace.Properties.HttpProperties == nil ||
+		a.namespace.Properties.HttpProperties.HttpName == nil {
+		return nil, fmt.Errorf("namespace properties are nil")
+	}
+
 	resp, err := a.client.DiscoverInstances(context.TODO(), &awssd.DiscoverInstancesInput{
-		HealthStatus:  awssdtypes.HealthStatusFilterHealthy,
-		NamespaceName: aws.String(a.namespace.name),
+		HealthStatus: awssdtypes.HealthStatusFilterHealthy,
+		// This is the http name, which can be different from the display name in the event there have been
+		// multiple versions of the namespace (i.e. it has been recreated).
+		NamespaceName: a.namespace.Properties.HttpProperties.HttpName,
 		ServiceName:   aws.String(name),
 	})
 	if err != nil {
@@ -328,9 +326,9 @@ func (a *awsSyncer) create(services map[string]service) int {
 			input := awssd.CreateServiceInput{
 				Description: &awsServiceDescription,
 				Name:        &name,
-				NamespaceId: &a.namespace.id,
+				NamespaceId: a.namespace.Id,
 			}
-			if !a.namespace.isHTTP {
+			if a.namespace.Type != awssdtypes.NamespaceTypeHttp {
 				input.DnsConfig = &awssdtypes.DnsConfig{
 					DnsRecords: []awssdtypes.DnsRecord{
 						{TTL: &a.dnsTTL, Type: awssdtypes.RecordTypeSrv},

@@ -50,19 +50,3 @@ func TestAWSTransformServices(t *testing.T) {
 	}
 	require.Equal(t, expected, a.transformServices(services))
 }
-
-func TestAWSTransformNamespace(t *testing.T) {
-	a := awsSyncer{}
-	type variant struct {
-		namespace awssdtypes.Namespace
-		expected  namespace
-	}
-	variants := []variant{
-		{namespace: awssdtypes.Namespace{Name: aws.String("A"), Id: aws.String("1"), Type: awssdtypes.NamespaceTypeDnsPublic}, expected: namespace{name: "A", id: "1", isHTTP: false}},
-		{namespace: awssdtypes.Namespace{Name: aws.String("B"), Id: aws.String("2"), Type: awssdtypes.NamespaceTypeHttp}, expected: namespace{name: "B", id: "2", isHTTP: true}},
-	}
-
-	for _, v := range variants {
-		require.Equal(t, v.expected, a.transformNamespace(&v.namespace))
-	}
-}
