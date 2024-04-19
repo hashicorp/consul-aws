@@ -10,12 +10,14 @@ import (
 )
 
 type Command struct {
-	UI      cli.Ui
-	Version string
+	UI        cli.Ui
+	Version   string
+	GitCommit string
 }
 
 func (c *Command) Run(_ []string) int {
 	c.UI.Output(fmt.Sprintf("consul-aws %s", c.Version))
+	c.UI.Output(fmt.Sprintf("Git Commit: %s", c.GitCommit))
 	return 0
 }
 

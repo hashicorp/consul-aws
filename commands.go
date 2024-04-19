@@ -25,7 +25,7 @@ func init() {
 		},
 
 		"version": func() (cli.Command, error) {
-			return &cmdVersion.Command{UI: ui, Version: version.GetHumanVersion()}, nil
+			return &cmdVersion.Command{UI: ui, Version: version.GetHumanVersion(), GitCommit: version.GitCommit}, nil
 		},
 	}
 }

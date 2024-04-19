@@ -4,50 +4,46 @@
 package version
 
 import (
+	_ "embed"
 	"fmt"
 	"strings"
 )
 
 var (
-	// The git commit that was compiled. These will be filled in by the compiler.
-	GitCommit   string
-	GitDescribe string
+	// The git commit that was compiled. These will be filled in by the
+	// compiler.
+	GitCommit string
 
-	// The main version number that is being run at the moment.
-	//
-	// Version must conform to the format expected by
-	// github.com/hashicorp/go-version for tests to work.
-	Version = "0.1.2"
-
-	// A pre-release marker for the version. If this is "" (empty string)
+	// The next version number that will be released. This will be updated after every release
+	// Version must conform to the format expected by github.com/hashicorp/go-version
+	// for tests to work.
+	// A pre-release marker for the version can also be specified (e.g -dev). If this is omitted
 	// then it means that it is a final release. Otherwise, this is a pre-release
 	// such as "dev" (in development), "beta", "rc1", etc.
-	VersionPrerelease = "dev"
+	//go:embed VERSION
+	fullVersion string
+
+	Version, VersionPrerelease, _ = strings.Cut(strings.TrimSpace(fullVersion), "-")
+
+	// https://semver.org/#spec-item-10
+	VersionMetadata = ""
 )
 
 // GetHumanVersion composes the parts of the version in a way that's suitable
 // for displaying to humans.
 func GetHumanVersion() string {
 	version := Version
-	if GitDescribe != "" {
-		version = GitDescribe
-	}
-
 	release := VersionPrerelease
-	if GitDescribe == "" && release == "" {
-		release = "dev"
-	}
+	metadata := VersionMetadata
 
 	if release != "" {
-		if !strings.HasSuffix(version, "-"+release) {
-			// if we tagged a prerelease version then the release is in the version already
-			version += fmt.Sprintf("-%s", release)
-		}
-		if GitCommit != "" {
-			version += fmt.Sprintf(" (%s)", GitCommit)
-		}
+		version += fmt.Sprintf("-%s", release)
+	}
+
+	if metadata != "" {
+		version += fmt.Sprintf("+%s", metadata)
 	}
 
 	// Strip off any single quotes added by the git information.
-	return strings.Replace(version, "'", "", -1)
+	return strings.ReplaceAll(version, "'", "")
 }

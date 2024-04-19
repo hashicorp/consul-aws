@@ -1,6 +1,8 @@
 # Consul-AWS
 
-`consul-aws` syncs the services in an AWS CloudMap namespace to a Consul datacenter. Consul services will be created in AWS CloudMap and the other way around. This enables native service discovery across Consul and AWS CloudMap.
+`consul-aws` syncs the services in an [AWS CloudMap](https://docs.aws.amazon.com/cloud-map/latest/dg/what-is-cloud-map.html) namespace to a Consul datacenter. 
+Consul services will be created in AWS CloudMap and the other way around. 
+This enables native service discovery across Consul and AWS CloudMap.
 
 This project is versioned separately from Consul. Supported Consul versions for each feature will be noted below. By versioning this project separately, we can iterate on AWS integrations more quickly and release new versions without forcing Consul users to do a full Consul upgrade.
 
@@ -32,7 +34,7 @@ $ ./consul-aws sync-catalog -aws-namespace-id ns-hjrgt3bapp7phzff -to-aws -to-co
 
 ## Contributing
 
-To build and install `consul-aws` locally, Go version 1.14+ is required.
+To build and install `consul-aws` locally, Go version 1.21+ is required.
 You will also need to install the Docker engine:
 
 - [Docker for Mac](https://docs.docker.com/engine/installation/mac/)
@@ -51,13 +53,7 @@ To compile the `consul-aws` binary for your local machine:
 $ make dev
 ```
 
-This will compile the `consul-aws` binary into `bin/consul-aws` as well as your `$GOPATH` and run the test suite.
-
-Or run the following to generate all binaries:
-
-```shell
-$ make dist
-```
+This will compile the `consul-aws` binary into `dist/$OS/$ARCH/consul-aws` as well as your `$GOPATH`.
 
 To create a docker image with your local changes:
 
@@ -83,6 +79,7 @@ You must also have a Consul server running locally.
 
 ## Compatibility with Consul
 
-`consul-aws` supports the current version of Consul and the version before. At the time of writing this, it means `1.7` and `1.6`.
+`consul-aws` is compatible with supported versions of Consul. 
+See [long-term support docs](https://developer.hashicorp.com/consul/docs/enterprise/long-term-support#long-term-support-lifecycle) for more information.
 
 [releases]: https://releases.hashicorp.com/consul-aws "Consul-AWS Releases"
