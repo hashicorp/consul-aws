@@ -41,7 +41,7 @@ jobs:
         with:
           repository: hashicorp/security-scanner
           #TODO: replace w/ HASHIBOT_PRODSEC_GITHUB_TOKEN once provisioned
-          token: ${{ secrets.PRODSEC_SCANNER_READ_ONLY }}
+          token: ${{ secrets.HASHIBOT_PRODSEC_GITHUB_TOKEN }}
           path: security-scanner
           ref: main
 
