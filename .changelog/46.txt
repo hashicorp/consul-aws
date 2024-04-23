@@ -1,0 +1,4 @@
+```release-note:bug
+Fix a bug that would cause AWS instance discovery queries to fail if the CloudMap Namespace name was different from it's HTTP Name.
+This can happen when a CloudMap Namespace is re-created with the same Name.
+```
