@@ -1,6 +1,6 @@
 ## 0.1.3 (April, 23, 2024)
 
-SSECURITY:
+SECURITY:
 
 * Update dependencies to fix security vulnerabilities.
 Due to the large number of dependencies, the list of CVEs is not included in this release note. [[GH-44](https://github.com/hashicorp/consul/issues/44)]
