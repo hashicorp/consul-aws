@@ -112,15 +112,3 @@ event "promote-production-docker" {
   }
 }
 
-event "promote-production-packaging" {
-  depends = ["promote-production-docker"]
-  action "promote-production-packaging" {
-    organization = "hashicorp"
-    repository = "crt-workflows-common"
-    workflow = "promote-production-packaging"
-  }
-
-  notification {
-    on = "always"
-  }
-}
