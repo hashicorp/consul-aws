@@ -22,6 +22,7 @@ ENV BIN_NAME=$BIN_NAME
 ARG PRODUCT_VERSION
 ARG PRODUCT_REVISION
 ARG PRODUCT_NAME=$BIN_NAME
+ENV PRODUCT_NAME=$PRODUCT_NAME
 
 # TARGETARCH and TARGETOS are set automatically when --platform is provided.
 ARG TARGETOS
@@ -34,11 +35,13 @@ LABEL name=${BIN_NAME}\
       release=${PRODUCT_REVISION} \
       revision=${PRODUCT_REVISION} \
       summary="Consul AWS is a tool for bi-directional sync between AWS CloudMap and Consul." \
+      licenses="MPL-2.0" \
       description="Consul AWS is a tool for bi-directional sync between AWS CloudMap and Consul."
 
 COPY --from=dumb-init /usr/bin/dumb-init /usr/local/bin/
 COPY dist/$TARGETOS/$TARGETARCH/$BIN_NAME /usr/local/bin/
 COPY LICENSE /licenses/copyright.txt
+COPY LICENSE /usr/share/doc/$PRODUCT_NAME/LICENSE.txt
 
 USER 100
 
@@ -56,6 +59,7 @@ ENV BIN_NAME=$BIN_NAME
 ARG PRODUCT_VERSION
 ARG PRODUCT_REVISION
 ARG PRODUCT_NAME=$BIN_NAME
+ENV PRODUCT_NAME=$PRODUCT_NAME
 # TARGETARCH and TARGETOS are set automatically when --platform is provided.
 ARG TARGETOS
 ARG TARGETARCH
@@ -67,6 +71,7 @@ LABEL name=${BIN_NAME}\
       release=${PRODUCT_REVISION} \
       revision=${PRODUCT_REVISION} \
       summary="Consul AWS is a tool for bi-directional sync between AWS CloudMap and Consul." \
+      licenses="MPL-2.0" \
       description="Consul AWS is a tool for bi-directional sync between AWS CloudMap and Consul."
 
 RUN microdnf install -y shadow-utils
@@ -79,6 +84,7 @@ RUN groupadd --gid 1000 $PRODUCT_NAME && \
 COPY --from=dumb-init /usr/bin/dumb-init /usr/local/bin/
 COPY dist/$TARGETOS/$TARGETARCH/$BIN_NAME /usr/local/bin/
 COPY LICENSE /licenses/copyright.txt
+COPY LICENSE /usr/share/doc/$PRODUCT_NAME/LICENSE.txt
 
 USER 100
 ENTRYPOINT ["/usr/local/bin/dumb-init", "/usr/local/bin/consul-aws"]
