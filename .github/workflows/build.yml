@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@0ad4b8fadaa221de15dcec353f45205ec38ea70b # v4.1.4
       - name: Set Product version
         id: set-product-version
-        uses: hashicorp/actions-set-product-version@v1
+        uses: hashicorp/actions-set-product-version@v2
 
   generate-metadata-file:
     needs: set-product-version
@@ -74,7 +74,7 @@ jobs:
     steps:
       - uses: actions/checkout@0ad4b8fadaa221de15dcec353f45205ec38ea70b # v4.1.4
 
-      - uses: hashicorp/actions-go-build@v0.1.7
+      - uses: hashicorp/actions-go-build@v1
         env:
           BASE_VERSION: ${{ needs.set-product-version.outputs.product-base-version }}
           PRERELEASE_VERSION: ${{ needs.set-product-version.outputs.product-prerelease-version}}
@@ -108,7 +108,7 @@ jobs:
     steps:
       - uses: actions/checkout@0ad4b8fadaa221de15dcec353f45205ec38ea70b # v4.1.4
 
-      - uses: hashicorp/actions-go-build@v0.1.7
+      - uses: hashicorp/actions-go-build@v1
         with:
           product_name: ${{ env.PKG_NAME }}
           product_version: ${{ needs.set-product-version.outputs.product-version }}
@@ -139,7 +139,7 @@ jobs:
     steps:
       - uses: actions/checkout@0ad4b8fadaa221de15dcec353f45205ec38ea70b # v4.1.4
 
-      - uses: hashicorp/actions-go-build@v0.1.7
+      - uses: hashicorp/actions-go-build@v1
         with:
           product_name: ${{ env.PKG_NAME }}
           product_version: ${{ needs.set-product-version.outputs.product-version }}
@@ -177,7 +177,7 @@ jobs:
           echo "minor_dev_tag=$(echo ${{ env.version }}| sed -E 's/([0-9]+\.[0-9]+)\.[0-9]+(-[0-9a-zA-Z\+\.]+)?$/\1\2/')" >> $GITHUB_ENV
 
       - name: Docker Build (Action)
-        uses: hashicorp/actions-docker-build@76d2fc91532d816ca2660d8f3139e432ac3700fd
+        uses: hashicorp/actions-docker-build@v2
         with:
           smoke_test: |
             TEST_VERSION="$(docker run "${IMAGE_NAME}" version | head -n1 | cut -d' ' -f2 | sed 's/^v//')"
@@ -216,7 +216,7 @@ jobs:
   #     version: ${{needs.set-product-version.outputs.product-version}}
   #   steps:
   #     - uses: actions/checkout@c85c95e3d7251135ab7dc9ce3241c5835cc595a9 # v3.5.3
-  #     - uses: hashicorp/actions-docker-build@76d2fc91532d816ca2660d8f3139e432ac3700fd
+  #     - uses: hashicorp/actions-docker-build@v2
   #       with:
   #         version: ${{env.version}}
   #         target: ${{ matrix.target-name }}
@@ -248,7 +248,7 @@ jobs:
   #         echo "minor_dev_tag=$(echo ${{ env.version }}| sed -E 's/([0-9]+\.[0-9]+)\.[0-9]+(-[0-9a-zA-Z\+\.]+)?$/\1\2/')" >> $GITHUB_ENV
 
   #     - name: Docker Build (Action)
-  #       uses: hashicorp/actions-docker-build@76d2fc91532d816ca2660d8f3139e432ac3700fd
+  #       uses: hashicorp/actions-docker-build@v2
   #       with:
   #         smoke_test: |
   #           TEST_VERSION="$(docker run "${IMAGE_NAME}" version | head -n1 | cut -d' ' -f2 | sed 's/^v//')"
