@@ -1,0 +1,3 @@
+```release-note:enhancement
+bump go version to 1.22.3.
+```
