@@ -102,41 +102,11 @@ jobs:
           - {goos: "linux", goarch: "arm64"}
           - {goos: "linux", goarch: "386"}
           - {goos: "linux", goarch: "amd64"}
+          - {goos: "darwin", goarch: "arm" }
+          - {goos: "darwin", goarch: "arm64" }
       fail-fast: true
 
     name: Go ${{ needs.get-go-version.outputs.go-version }} ${{ matrix.goos }} ${{ matrix.goarch }} build
-
-    steps:
-      - uses: actions/checkout@0ad4b8fadaa221de15dcec353f45205ec38ea70b # v4.1.4
-
-      - uses: hashicorp/actions-go-build@v1
-        with:
-          product_name: ${{ env.PKG_NAME }}
-          product_version: ${{ needs.set-product-version.outputs.product-version }}
-          go_version: ${{ needs.get-go-version.outputs.go-version }}
-          os: ${{ matrix.goos }}
-          arch: ${{ matrix.goarch }}
-          reproducible: assert
-          instructions: |
-            cp LICENSE $TARGET_DIR/LICENSE.txt
-            make build
-
-  build-darwin:
-    needs:
-      - get-go-version
-      - set-product-version
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        goos: [darwin]
-        goarch: ["amd64", "arm64"]
-      fail-fast: true
-
-    name: Go ${{ needs.get-go-version.outputs.go-version }} ${{ matrix.goos }} ${{ matrix.goarch }} build
-
-    env:
-      GOOS: ${{ matrix.goos }}
-      GOARCH: ${{ matrix.goarch }}
 
     steps:
       - uses: actions/checkout@0ad4b8fadaa221de15dcec353f45205ec38ea70b # v4.1.4
