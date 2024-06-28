@@ -102,7 +102,7 @@ jobs:
           - {goos: "linux", goarch: "arm64"}
           - {goos: "linux", goarch: "386"}
           - {goos: "linux", goarch: "amd64"}
-          - {goos: "darwin", goarch: "arm"}
+          - {goos: "darwin", goarch: "amd64"}
           - {goos: "darwin", goarch: "arm64"}
       fail-fast: true
 
