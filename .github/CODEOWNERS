@@ -1,5 +1,1 @@
 * @hashicorp/consul-selfmanage-maintainers
-
-# release configuration
-/.release/                              @hashicorp/release-approvers-consul
-/.github/workflows/build.yml            @hashicorp/release-approvers-consul
