@@ -1,4 +1,4 @@
-* @hashicorp/consul-selfmanage-maintainers
+* @hashicorp/consul-selfmanage-maintainers @hashicorp/team-consul-core
 
 # release configuration
 /.release/                              @hashicorp/team-selfmanaged-releng
