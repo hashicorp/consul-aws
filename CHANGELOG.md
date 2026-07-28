@@ -1,3 +1,9 @@
+## UNRELEASED
+
+IMPROVEMENTS:
+
+* Add `.release/consul-aws-artifacts.hcl` with container block to enable IBM Twistlock container scanning via CRT pipeline (PSP-3744). [[GH-65](https://github.com/hashicorp/consul-aws/pull/65)]
+
 ## 0.1.3 (April, 23, 2024)
 
 SECURITY:
