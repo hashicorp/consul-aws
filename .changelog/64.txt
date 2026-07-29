@@ -1,0 +1,4 @@
+```release-note:enhancement
+
+bump go version to 1.26.4
+```
