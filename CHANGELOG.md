@@ -1,3 +1,11 @@
+## 0.1.4 (October 21, 2026)
+
+SECURITY:
+
+* Upgrade `golang.org/x/crypto` to v0.57.0 and `golang.org/x/sys` to v0.48.0 to address GHSA-5cgq-3rg8-m6cv and other reported vulnerabilities.
+* Upgrade Go toolchain to 1.26.10.
+* Update container base images: `ubi9-minimal` to 9.8 and distroless `base-debian11` (end of life) to `base-debian13`.
+
 ## 0.1.3 (April, 23, 2024)
 
 SECURITY:
