@@ -14,7 +14,7 @@ RUN apk add dumb-init
 
 # release-default release image
 # -----------------------------------
-FROM gcr.io/distroless/base-debian11 AS release-default
+FROM gcr.io/distroless/base-debian13 AS release-default
 
 ARG BIN_NAME=consul-aws
 ENV BIN_NAME=$BIN_NAME
@@ -51,7 +51,7 @@ ENTRYPOINT ["/usr/local/bin/dumb-init", "/usr/local/bin/consul-aws"]
 # This image is based on the Red Hat UBI base image, and has the necessary
 # labels, license file, and non-root user.
 # -----------------------------------
-FROM registry.access.redhat.com/ubi9-minimal:9.3 as release-ubi
+FROM registry.access.redhat.com/ubi9-minimal:9.8 as release-ubi
 
 ARG BIN_NAME=consul-aws
 ENV BIN_NAME=$BIN_NAME
