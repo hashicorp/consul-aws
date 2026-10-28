@@ -21,4 +21,14 @@ repository {
   secrets {
     all = true
   }
+
+  # Triage items that are _safe_ to ignore here. Note that this list should be
+  # periodically cleaned up to remove items that are no longer found by the scanner.
+  triage {
+    suppress {
+      vulnerabilities = [
+        "GO-2026-5932", // x/crypto/openpgp: no fixed version exists upstream; consul-aws imports no openpgp package.
+      ]
+    }
+  }
 }
