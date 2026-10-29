@@ -4,12 +4,6 @@ SECURITY:
 
 * Upgrade Go to 1.26.10, update Docker base images (distroless base-debian13, ubi9-minimal 9.8) and update dependencies to address security vulnerabilities. [[GH-70](https://github.com/hashicorp/consul-aws/issues/70)]
 
-IMPROVEMENTS:
-
-* bump go version to 1.22.3. [[GH-51](https://github.com/hashicorp/consul-aws/issues/51)]
-* bump go version to 1.22.4. [[GH-52](https://github.com/hashicorp/consul-aws/issues/52)]
-* bump go version to 1.24.2. [[GH-59](https://github.com/hashicorp/consul-aws/issues/59)]
-
 ## 0.1.3 (April, 23, 2024)
 
 SECURITY:
