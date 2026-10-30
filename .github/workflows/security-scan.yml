@@ -23,6 +23,10 @@ jobs:
     needs:
     - get-go-version
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
     # The first check ensures this doesn't run on community-contributed PRs, who
     # won't have the permissions to run this job.
     if: ${{ (github.repository != 'hashicorp/consul-aws' || (github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name))
