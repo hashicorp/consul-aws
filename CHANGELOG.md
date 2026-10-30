@@ -1,3 +1,9 @@
+## 0.1.4 (October 28, 2026)
+
+SECURITY:
+
+* Upgrade Go to 1.26.10, update Docker base images (distroless base-debian13, ubi9-minimal 9.8) and update dependencies to address security vulnerabilities. [[GH-70](https://github.com/hashicorp/consul-aws/issues/70)]
+
 ## 0.1.3 (April, 23, 2024)
 
 SECURITY:

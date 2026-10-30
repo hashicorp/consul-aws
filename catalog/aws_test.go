@@ -39,14 +39,14 @@ func TestAWSTransformNodes(t *testing.T) {
 }
 
 func TestAWSTransformServices(t *testing.T) {
-	a := awsSyncer{}
+	a := awsSyncer{namespace: &awssdtypes.Namespace{Id: aws.String("ns")}}
 	services := []awssdtypes.ServiceSummary{
 		{Id: aws.String("one"), Name: aws.String("web"), Description: &awsServiceDescription},
 		{Id: aws.String("two"), Name: aws.String("redis")},
 	}
 	expected := map[string]service{
-		"web":   {id: "one", name: "web", awsID: "one", fromConsul: true},
-		"redis": {id: "two", name: "redis", awsID: "two", fromConsul: false},
+		"web":   {id: "one", name: "web", awsID: "one", awsNamespace: "ns", fromConsul: true},
+		"redis": {id: "two", name: "redis", awsID: "two", awsNamespace: "ns", fromConsul: false},
 	}
 	require.Equal(t, expected, a.transformServices(services))
 }
